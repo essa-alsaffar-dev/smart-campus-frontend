@@ -113,6 +113,13 @@ export default function Register() {
           box-shadow: 0 0 0 3px rgba(239,68,68,0.10);
         }
 
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+          .sc-left-panel { display: none !important; }
+          .sc-right-panel { padding: 24px 16px !important; }
+          .sc-card { padding: 28px 20px !important; }
+        }
+
         .sc-reg-btn {
           transition: filter 0.15s, transform 0.1s, box-shadow 0.15s;
         }
@@ -174,7 +181,7 @@ export default function Register() {
       `}</style>
 
       {/* Left decorative panel */}
-      <div style={leftPanel}>
+      <div className="sc-left-panel" style={leftPanel}>
         <div style={dotGrid} />
         <div style={leftContent}>
           <div style={brandMark}>SC</div>
@@ -199,7 +206,7 @@ export default function Register() {
       </div>
 
       {/* Right form */}
-      <div style={rightPanel}>
+      <div className="sc-right-panel" style={rightPanel}>
         <div className="sc-card" style={card}>
 
           <Link to="/" style={backLink}>← Back to Home</Link>
@@ -421,6 +428,7 @@ const leftPanel = {
   minWidth: "400px",
   background: "linear-gradient(155deg, #052e16 0%, #14532d 50%, #166534 100%)",
   overflow: "hidden",
+  // hidden on mobile via CSS class below
 };
 
 const dotGrid = {

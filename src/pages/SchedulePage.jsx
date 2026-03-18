@@ -96,24 +96,51 @@ export default function SchedulePage() {
   const [courseColorMap, setCourseColorMap] = useState({});
 
   useEffect(() => {
-    const savedSchedule = JSON.parse(localStorage.getItem(`schedule_${localStorage.getItem("userName") || "guest"}`)) || [];
-    const savedRooms = JSON.parse(localStorage.getItem("classrooms")) || [];
-    setSchedule(savedSchedule);
-    setRooms(savedRooms);
+    const load = async () => {
+      try {
+        const res = await axios.get(`${API}/schedule`, { headers: getHeaders() });
+        const entries = res.data.map(e => ({
+          id:         e.id,
+          courseName: e.courseName,
+          day:        e.dayOfWeek,
+          time:       `${e.startTime} - ${e.endTime}`,
+          room:       e.room || e.classroom?.name || "",
+          color:      e.color,
+        }));
+        setSchedule(entries);
+        // Also save to localStorage for ParkingPage
+        localStorage.setItem(`schedule_${localStorage.getItem("userName")||"guest"}`, JSON.stringify(entries));
 
-    const colorMap = {};
-    savedSchedule.forEach((entry) => {
-      if (!colorMap[entry.courseName]) {
-        const idx = Object.keys(colorMap).length % COURSE_COLORS.length;
-        colorMap[entry.courseName] = COURSE_COLORS[idx];
+        const colorMap = {};
+        entries.forEach((entry) => {
+          if (!colorMap[entry.courseName]) {
+            const idx = Object.keys(colorMap).length % COURSE_COLORS.length;
+            colorMap[entry.courseName] = entry.color || COURSE_COLORS[idx];
+          }
+        });
+        setCourseColorMap(colorMap);
+      } catch {
+        // Fallback to localStorage
+        const saved = JSON.parse(localStorage.getItem(`schedule_${localStorage.getItem("userName")||"guest"}`) || "[]");
+        setSchedule(saved);
+        const colorMap = {};
+        saved.forEach((entry) => {
+          if (!colorMap[entry.courseName]) {
+            const idx = Object.keys(colorMap).length % COURSE_COLORS.length;
+            colorMap[entry.courseName] = COURSE_COLORS[idx];
+          }
+        });
+        setCourseColorMap(colorMap);
       }
-    });
-    setCourseColorMap(colorMap);
+      const savedRooms = JSON.parse(localStorage.getItem("classrooms")) || [];
+      setRooms(savedRooms);
+    };
+    load();
   }, []);
 
   const saveSchedule = (updated) => {
     setSchedule(updated);
-    localStorage.setItem(`schedule_${localStorage.getItem("userName") || "guest"}`, JSON.stringify(updated));
+    localStorage.setItem(`schedule_${localStorage.getItem("userName")||"guest"}`, JSON.stringify(updated));
   };
 
   const showToast = (msg) => {
@@ -129,31 +156,31 @@ export default function SchedulePage() {
     return color;
   };
 
-  const addSchedule = () => {
+  const addSchedule = async () => {
     if (!courseName.trim() || !day || !startTime || !endTime || !room) {
-      showToast("⚠️ Please fill in all fields");
-      return;
+      showToast("⚠️ Please fill in all fields"); return;
     }
-
     if (parseTimeToMinutes(endTime) <= parseTimeToMinutes(startTime)) {
-      showToast("⚠️ End time must be after start time");
-      return;
+      showToast("⚠️ End time must be after start time"); return;
     }
-
-    const timeRange = `${startTime} - ${endTime}`;
-    const newEntry = { id: Date.now(), courseName, day, time: timeRange, room };
-    assignColor(courseName);
-    saveSchedule([...schedule, newEntry]);
-
-    setCourseName("");
-    setStartTime("");
-    setEndTime("");
-    setRoom("");
-    setShowForm(false);
-    showToast("✅ Class added!");
+    const color = assignColor(courseName);
+    try {
+      const res = await axios.post(`${API}/schedule`, {
+        courseName, dayOfWeek: day, startTime, endTime, room, color
+      }, { headers: getHeaders() });
+      const entry = { id: res.data.id, courseName, day, time: `${startTime} - ${endTime}`, room, color };
+      saveSchedule([...schedule, entry]);
+      showToast("✅ Class added!");
+    } catch {
+      const entry = { id: Date.now(), courseName, day, time: `${startTime} - ${endTime}`, room, color };
+      saveSchedule([...schedule, entry]);
+      showToast("✅ Class added (offline)");
+    }
+    setCourseName(""); setStartTime(""); setEndTime(""); setRoom(""); setShowForm(false);
   };
 
-  const deleteSchedule = (id) => {
+  const deleteSchedule = async (id) => {
+    try { await axios.delete(`${API}/schedule/${id}`, { headers: getHeaders() }); } catch {}
     saveSchedule(schedule.filter((s) => s.id !== id));
     showToast("🗑 Class removed");
   };

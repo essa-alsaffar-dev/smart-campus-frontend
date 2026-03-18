@@ -1,4 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import axios from "axios";
+
+const API = "https://smart-campus-backend-bbmo.onrender.com";
+const getHeaders = () => { const t = localStorage.getItem("token"); return t ? { Authorization: `Bearer ${t}` } : {}; };
 
 // ─── Parking zones data ───────────────────────────────────────────────────────
 const ZONES_DEFAULT = [
@@ -91,21 +95,55 @@ export default function ParkingPage() {
     const saved = localStorage.getItem("parking_zones_v2");
     return saved ? JSON.parse(saved) : ZONES_DEFAULT;
   });
-
-  // current student's parking session
-  const [mySession, setMySession] = useState(() => {
-    const saved = localStorage.getItem(`my_parking_session_${localStorage.getItem("userName") || "guest"}`);
-    return saved ? JSON.parse(saved) : null; // { zoneId, endTime, courseName }
-  });
-
+  const [mySession, setMySession] = useState(null);
   const [toast, setToast] = useState("");
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [loadingZones, setLoadingZones] = useState(true);
 
-  // Load schedule to suggest end time
+  // Load schedule from localStorage (synced by SchedulePage)
   const schedule = useMemo(() => {
     const saved = localStorage.getItem(`schedule_${localStorage.getItem("userName") || "guest"}`);
     return saved ? JSON.parse(saved) : [];
   }, []);
+
+  // Load zones and my session from API
+  const refreshZones = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/parking-zones`);
+      const apiZones = res.data.map(z => ({
+        id:          z.id,
+        name:        z.name,
+        description: z.description,
+        icon:        z.icon,
+        total:       z.total,
+        occupied:    z.occupied,
+      }));
+      setZones(apiZones);
+      localStorage.setItem("parking_zones_v2", JSON.stringify(apiZones));
+    } catch {
+      const saved = localStorage.getItem("parking_zones_v2");
+      if (saved) setZones(JSON.parse(saved));
+    } finally { setLoadingZones(false); }
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/parking-zones/my-session`, { headers: getHeaders() });
+      if (res.data.active) {
+        setMySession({ zoneId: res.data.zoneId, checkedInAt: res.data.checkedInAt });
+      } else {
+        setMySession(null);
+      }
+    } catch { setMySession(null); }
+  }, []);
+
+  useEffect(() => {
+    refreshZones();
+    refreshSession();
+    // Auto-refresh zones every 15 seconds (real-time)
+    const interval = setInterval(refreshZones, 15000);
+    return () => clearInterval(interval);
+  }, [refreshZones, refreshSession]);
 
   // ── Auto-release: if student's class ended, suggest leaving ──
   const [autoReleasePrompt, setAutoReleasePrompt] = useState(false);
@@ -132,59 +170,43 @@ export default function ParkingPage() {
     localStorage.setItem("parking_zones_v2", JSON.stringify(updated));
   };
 
-  const saveSession = (session) => {
-    setMySession(session);
-    if (session) {
-      localStorage.setItem(`my_parking_session_${localStorage.getItem("userName") || "guest"}`, JSON.stringify(session));
-    } else {
-      localStorage.removeItem(`my_parking_session_${localStorage.getItem("userName") || "guest"}`);
-    }
-  };
-
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2800);
   };
 
   // ── Check in ──
-  const checkIn = (zoneId, endTime, courseName) => {
+  const checkIn = async (zoneId, endTime, courseName) => {
     const zone = zones.find((z) => z.id === zoneId);
     if (!zone) return;
+    if (zone.occupied >= zone.total) { showToast("This zone is full!"); return; }
 
-    if (zone.occupied >= zone.total) {
-      showToast("This zone is full!");
-      return;
+    try {
+      const res = await axios.post(`${API}/parking-zones/checkin/${zoneId}`, {}, { headers: getHeaders() });
+      if (!res.data.success) { showToast(res.data.message || "Check-in failed"); return; }
+      setMySession({ zoneId, endTime: endTime||null, courseName: courseName||null, checkedInAt: res.data.checkedInAt });
+      await refreshZones();
+    } catch {
+      // Fallback offline
+      const updated = zones.map((z) => z.id === zoneId ? { ...z, occupied: z.occupied + 1 } : z);
+      saveZones(updated);
+      setMySession({ zoneId, endTime: endTime||null, courseName: courseName||null });
     }
-
-    const updated = zones.map((z) =>
-      z.id === zoneId ? { ...z, occupied: z.occupied + 1 } : z
-    );
-
-    saveZones(updated);
-    saveSession({
-      zoneId,
-      endTime: endTime || null,
-      courseName: courseName || null,
-    });
     setAutoReleasePrompt(false);
-    showToast(`You are checked in at ${zone.name}`);
+    showToast(`✅ Checked in at ${zone.name}`);
   };
 
   // ── Check out ──
-  const checkOut = () => {
+  const checkOut = async () => {
     if (!mySession) return;
-
-    const updated = zones.map((z) =>
-      z.id === mySession.zoneId
-        ? { ...z, occupied: Math.max(0, z.occupied - 1) }
-        : z
-    );
-
-    saveZones(updated);
-    saveSession(null);
+    try {
+      await axios.delete(`${API}/parking-zones/checkout`, { headers: getHeaders() });
+    } catch {}
+    setMySession(null);
+    await refreshZones();
     setConfirmLeave(false);
     setAutoReleasePrompt(false);
-    showToast("You have checked out");
+    showToast("✅ You have checked out");
   };
 
   // ── Today's schedule for suggestion ──
