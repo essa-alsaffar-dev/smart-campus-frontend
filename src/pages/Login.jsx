@@ -18,7 +18,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const response = await axios.post("http://localhost:8080/auth/login", {
+      const response = await axios.post("https://smart-campus-backend-production-bf5e.up.railway.app/auth/login", {
         email,
         password,
       });

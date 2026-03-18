@@ -51,7 +51,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await axios.post("http://localhost:8080/auth/register", {
+      await axios.post("https://smart-campus-backend-production-bf5e.up.railway.app/auth/register", {
         name,
         email,
         password,
