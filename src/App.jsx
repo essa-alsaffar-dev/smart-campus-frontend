@@ -15,6 +15,7 @@ import ClassroomsPage   from "./pages/ClassroomsPage";
 import AdminParkingPage from "./pages/AdminParkingPage";
 import ProfilePage      from "./pages/ProfilePage";
 import AboutPage       from "./pages/AboutPage";
+import ForgotPassword  from "./pages/ForgotPassword";
 
 function App() {
   return (
@@ -24,7 +25,8 @@ function App() {
       <Route path="/login"       element={<Login />}      />
       <Route path="/register"    element={<Register />}   />
       <Route path="/admin/login" element={<AdminLogin />} />
-      <Route path="/about"       element={<AboutPage />}   />
+      <Route path="/about"          element={<AboutPage />}      />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Student routes */}
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
