@@ -1,426 +1,423 @@
-import { useNavigate } from "react-router-dom";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
 
-const NAV_CARDS = [
-  {
-    path: "/tasks",
-    icon: "✓",
-    title: "Tasks",
-    desc: "Track assignments, deadlines, and exam preparation.",
-    color: "#2563eb",
-    bg: "#eff6ff",
-    border: "#bfdbfe",
-  },
-  {
-    path: "/schedule",
-    icon: "🗓",
-    title: "Schedule",
-    desc: "View your weekly classes and organize your study time.",
-    color: "#9333ea",
-    bg: "#fdf4ff",
-    border: "#e9d5ff",
-  },
-  {
-    path: "/parking",
-    icon: "🅿",
-    title: "Parking",
-    desc: "Check real-time spot availability across all campus zones.",
-    color: "#059669",
-    bg: "#ecfdf5",
-    border: "#a7f3d0",
-  },
-  {
-    path: "/classrooms",
-    icon: "⌂",
-    title: "Classrooms",
-    desc: "Find rooms, buildings, and campus locations instantly.",
-    color: "#ea580c",
-    bg: "#fff7ed",
-    border: "#fed7aa",
-  },
+const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
+
+const days = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
 ];
 
-// Weekday name matching
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const formatTime = (timeStr) => {
+  if (!timeStr) return "";
+  const [h, m] = timeStr.split(":").map(Number);
+  const suffix = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${m.toString().padStart(2, "0")} ${suffix}`;
+};
+
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+};
 
 export default function Dashboard() {
-  const navigate  = useNavigate();
-  const userName  = localStorage.getItem("userName");
-  const userKey   = userName || "guest";
+  const [tasks, setTasks] = useState([]);
+  const [schedule, setSchedule] = useState([]);
+  const [parkingSession, setParkingSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(false);
 
-  // ── Live stats from localStorage ──
-  const stats = useMemo(() => {
+  const userName = localStorage.getItem("userName") || "Student";
+  const token = localStorage.getItem("token");
+
+  const getHeaders = useCallback(() => {
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, [token]);
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setApiError(false);
+
     try {
-      const tasks    = JSON.parse(localStorage.getItem(`tasks_v2_${userKey}`)    || "[]");
-      const schedule = JSON.parse(localStorage.getItem(`schedule_${userKey}`)    || "[]");
-      const parking  = JSON.parse(localStorage.getItem("parking_zones_v2")       || "null");
+      const [tasksRes, scheduleRes, parkingRes] = await Promise.allSettled([
+        axios.get(`${API}/tasks`, { headers: getHeaders() }),
+        axios.get(`${API}/schedule`, { headers: getHeaders() }),
+        axios.get(`${API}/parking-zones/my-session`, { headers: getHeaders() }),
+      ]);
 
-      const activeTasks  = tasks.filter((t) => !t.completed).length;
-      const overdueTasks = tasks.filter((t) => {
-        if (!t.dueDate || t.completed) return false;
-        return new Date(t.dueDate) < new Date(new Date().toDateString());
-      }).length;
-
-      const todayName    = DAYS[new Date().getDay()];
-      const todayClasses = schedule.filter((s) => s.day === todayName).length;
-      const totalClasses = schedule.length;
-
-      let availableSpots = null;
-      if (parking) {
-        availableSpots = parking.reduce((sum, z) => sum + (z.total - z.occupied), 0);
+      // Tasks
+      if (tasksRes.status === "fulfilled") {
+        const rawTasks = Array.isArray(tasksRes.value.data) ? tasksRes.value.data : [];
+        setTasks(
+          rawTasks.map((t) => ({
+            id: t.id,
+            title: t.title || "",
+            completed: t.status === "COMPLETED",
+            dueDate: t.dueDate || "",
+            priority: t.type || "Medium",
+          }))
+        );
+      } else {
+        setTasks([]);
       }
 
-      return { activeTasks, overdueTasks, todayClasses, totalClasses, availableSpots };
-    } catch {
-      return { activeTasks: 0, overdueTasks: 0, todayClasses: 0, totalClasses: 0, availableSpots: null };
+      // Schedule
+      if (scheduleRes.status === "fulfilled") {
+        const rawSchedule = Array.isArray(scheduleRes.value.data) ? scheduleRes.value.data : [];
+        setSchedule(
+          rawSchedule.map((e) => ({
+            id: e.id,
+            courseName: e.courseName,
+            day: e.dayOfWeek,
+            startTime: e.startTime,
+            endTime: e.endTime,
+            room: e.room || e.classroom?.name || "",
+            color: e.color || "#2563eb",
+          }))
+        );
+      } else {
+        setSchedule([]);
+      }
+
+      // Parking
+      if (parkingRes.status === "fulfilled" && parkingRes.value.data?.active) {
+        setParkingSession(parkingRes.value.data);
+      } else {
+        setParkingSession(null);
+      }
+
+      if (
+        tasksRes.status === "rejected" &&
+        scheduleRes.status === "rejected" &&
+        parkingRes.status === "rejected"
+      ) {
+        setApiError(true);
+      }
+    } catch (err) {
+      console.error("Dashboard load failed:", err);
+      setApiError(true);
+      setTasks([]);
+      setSchedule([]);
+      setParkingSession(null);
+    } finally {
+      setLoading(false);
     }
-  }, [userKey]);
+  }, [getHeaders]);
 
-  // Greeting based on time of day
-  const greeting = useMemo(() => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    return "Good evening";
-  }, []);
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long", month: "long", day: "numeric",
-  });
+  const todayName = days[new Date().getDay()];
+  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+
+  const todayClasses = useMemo(() => {
+    return schedule
+      .filter((s) => s.day === todayName)
+      .sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime));
+  }, [schedule, todayName]);
+
+  const nextClass = useMemo(() => {
+    return todayClasses.find((c) => parseTimeToMinutes(c.endTime) > nowMinutes) || null;
+  }, [todayClasses, nowMinutes]);
+
+  const pendingTasks = useMemo(() => tasks.filter((t) => !t.completed), [tasks]);
+  const completedTasks = useMemo(() => tasks.filter((t) => t.completed), [tasks]);
 
   return (
     <div style={page}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
-        *, *::before, *::after { box-sizing: border-box; }
-
-        .sc-nav-card {
-          transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-          cursor: pointer;
-        }
-        .sc-nav-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 16px 40px rgba(15,23,42,0.12);
-        }
-        .sc-nav-card:active { transform: translateY(-2px); }
-
-        .sc-stat-card {
-          transition: transform 0.18s, box-shadow 0.18s;
-        }
-        .sc-stat-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(15,23,42,0.10);
-        }
-
-        @keyframes fadeUp {
-          from { opacity:0; transform:translateY(14px); }
-          to   { opacity:1; transform:translateY(0); }
-        }
-        .sc-f1 { animation: fadeUp 0.4s ease 0.00s both; }
-        .sc-f2 { animation: fadeUp 0.4s ease 0.08s both; }
-        .sc-f3 { animation: fadeUp 0.4s ease 0.16s both; }
-        .sc-f4 { animation: fadeUp 0.4s ease 0.24s both; }
-
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        .sc-overdue-dot { animation: pulse 1.6s ease-in-out infinite; }
-      `}</style>
-
-      {/* ── Header ── */}
-      <div className="sc-f1" style={headerSection}>
-        <div style={headerLeft}>
-          <p style={greetLabel}>{greeting} 👋</p>
-          <h1 style={heroName}>
-            {userName ? userName : "Student"}
-          </h1>
-          <p style={heroDate}>{today}</p>
-        </div>
-        <div style={heroBadge}>
-          <div style={heroBadgeIcon}>SC</div>
+      <div style={container}>
+        <div style={headerRow}>
           <div>
-            <div style={{ fontWeight: "700", fontSize: "14px", color: "#0f172a" }}>Smart Campus</div>
-            <div style={{ fontSize: "12px", color: "#64748b" }}>IAU · Building A11</div>
+            <h1 style={titleStyle}>Welcome back, {userName}</h1>
+            <p style={subtitleStyle}>
+              Here’s a quick view of your campus day.
+            </p>
+          </div>
+
+          <button style={refreshBtn} onClick={loadDashboard}>
+            ⟳ Refresh
+          </button>
+        </div>
+
+        {apiError && (
+          <div style={errorBox}>
+            Could not load some dashboard data. Please try again.
+          </div>
+        )}
+
+        <div style={statsGrid}>
+          <div style={statCard}>
+            <div style={statNumber}>{tasks.length}</div>
+            <div style={statLabel}>Total Tasks</div>
+          </div>
+
+          <div style={statCard}>
+            <div style={statNumber}>{pendingTasks.length}</div>
+            <div style={statLabel}>Pending Tasks</div>
+          </div>
+
+          <div style={statCard}>
+            <div style={statNumber}>{completedTasks.length}</div>
+            <div style={statLabel}>Completed Tasks</div>
+          </div>
+
+          <div style={statCard}>
+            <div style={statNumber}>{todayClasses.length}</div>
+            <div style={statLabel}>Today’s Classes</div>
           </div>
         </div>
+
+        {loading ? (
+          <div style={loadingBox}>Loading dashboard...</div>
+        ) : (
+          <div style={contentGrid}>
+            {/* Today schedule */}
+            <div style={card}>
+              <h3 style={cardTitle}>Today’s Schedule</h3>
+
+              {todayClasses.length === 0 ? (
+                <div style={emptyText}>No classes today.</div>
+              ) : (
+                <div style={list}>
+                  {todayClasses.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        ...scheduleItem,
+                        borderLeft: `6px solid ${item.color}`,
+                      }}
+                    >
+                      <div style={itemTitle}>{item.courseName}</div>
+                      <div style={metaText}>
+                        ⏰ {formatTime(item.startTime)} - {formatTime(item.endTime)}
+                      </div>
+                      <div style={metaText}>📍 {item.room}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Next class */}
+            <div style={card}>
+              <h3 style={cardTitle}>Next Class</h3>
+
+              {nextClass ? (
+                <div style={highlightBox}>
+                  <div style={itemTitle}>{nextClass.courseName}</div>
+                  <div style={metaText}>
+                    ⏰ {formatTime(nextClass.startTime)} - {formatTime(nextClass.endTime)}
+                  </div>
+                  <div style={metaText}>📍 {nextClass.room}</div>
+                </div>
+              ) : (
+                <div style={emptyText}>No upcoming class for today.</div>
+              )}
+            </div>
+
+            {/* Pending tasks */}
+            <div style={card}>
+              <h3 style={cardTitle}>Pending Tasks</h3>
+
+              {pendingTasks.length === 0 ? (
+                <div style={emptyText}>No pending tasks.</div>
+              ) : (
+                <div style={list}>
+                  {pendingTasks.slice(0, 5).map((task) => (
+                    <div key={task.id} style={taskItem}>
+                      <div style={itemTitle}>{task.title}</div>
+                      <div style={metaText}>
+                        {task.priority && <span>🏷 {task.priority}</span>}
+                        {task.dueDate && <span> &nbsp; • &nbsp; 📅 {task.dueDate}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Parking */}
+            <div style={card}>
+              <h3 style={cardTitle}>Parking Status</h3>
+
+              {parkingSession ? (
+                <div style={highlightBox}>
+                  <div style={itemTitle}>You are currently parked</div>
+                  <div style={metaText}>Zone ID: {parkingSession.zoneId}</div>
+                  {parkingSession.checkedInAt && (
+                    <div style={metaText}>
+                      Checked in: {new Date(parkingSession.checkedInAt).toLocaleString()}
+                    </div>
+                  )}
+                  {parkingSession.endTime && (
+                    <div style={metaText}>Ends at: {formatTime(parkingSession.endTime)}</div>
+                  )}
+                  {parkingSession.courseName && (
+                    <div style={metaText}>Course: {parkingSession.courseName}</div>
+                  )}
+                </div>
+              ) : (
+                <div style={emptyText}>No active parking session.</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* ── Live Stats ── */}
-      <div className="sc-f2" style={statsGrid}>
-
-        <div className="sc-stat-card" style={{ ...statCard, borderColor: "#bfdbfe" }}
-          onClick={() => navigate("/tasks")} style2={{ cursor: "pointer" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <p style={statLabel}>Active Tasks</p>
-              <p style={{ ...statValue, color: "#2563eb" }}>{stats.activeTasks}</p>
-            </div>
-            <div style={{ ...statIcon, background: "#eff6ff", color: "#2563eb" }}>✓</div>
-          </div>
-          {stats.overdueTasks > 0 && (
-            <div style={overduePill}>
-              <span className="sc-overdue-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", display: "inline-block" }} />
-              &nbsp;{stats.overdueTasks} overdue
-            </div>
-          )}
-        </div>
-
-        <div className="sc-stat-card" style={{ ...statCard, borderColor: "#e9d5ff", cursor: "pointer" }}
-          onClick={() => navigate("/schedule")}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <p style={statLabel}>Today's Classes</p>
-              <p style={{ ...statValue, color: "#9333ea" }}>{stats.todayClasses}</p>
-            </div>
-            <div style={{ ...statIcon, background: "#fdf4ff", color: "#9333ea" }}>🗓</div>
-          </div>
-          <p style={statSub}>{stats.totalClasses} total this week</p>
-        </div>
-
-        <div className="sc-stat-card" style={{ ...statCard, borderColor: "#a7f3d0", cursor: "pointer" }}
-          onClick={() => navigate("/parking")}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <p style={statLabel}>Available Spots</p>
-              <p style={{ ...statValue, color: "#059669" }}>
-                {stats.availableSpots !== null ? stats.availableSpots : "—"}
-              </p>
-            </div>
-            <div style={{ ...statIcon, background: "#ecfdf5", color: "#059669" }}>🅿</div>
-          </div>
-          <p style={statSub}>Across all campus zones</p>
-        </div>
-
-        <div className="sc-stat-card" style={{ ...statCard, borderColor: "#fed7aa", cursor: "pointer" }}
-          onClick={() => navigate("/classrooms")}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <p style={statLabel}>Classrooms</p>
-              <p style={{ ...statValue, color: "#ea580c" }}>170+</p>
-            </div>
-            <div style={{ ...statIcon, background: "#fff7ed", color: "#ea580c" }}>⌂</div>
-          </div>
-          <p style={statSub}>Building A11 — searchable</p>
-        </div>
-
-      </div>
-
-      {/* ── Quick Access ── */}
-      <div className="sc-f3" style={sectionHead}>
-        <h2 style={sectionTitle}>Quick Access</h2>
-        <p style={sectionSub}>Jump to any service</p>
-      </div>
-
-      <div className="sc-f3" style={navGrid}>
-        {NAV_CARDS.map((c) => (
-          <div
-            key={c.path}
-            className="sc-nav-card"
-            style={{
-              ...navCard,
-              border: `1.5px solid ${c.border}`,
-            }}
-            onClick={() => navigate(c.path)}
-          >
-            <div style={{ ...navIcon, background: c.bg, color: c.color }}>
-              {c.icon}
-            </div>
-            <h3 style={{ ...navTitle, color: "#0f172a" }}>{c.title}</h3>
-            <p style={navDesc}>{c.desc}</p>
-            <span style={{ ...navArrow, color: c.color }}>→</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Info panels ── */}
-      <div className="sc-f4" style={bottomGrid}>
-        <div style={infoPanel}>
-          <h3 style={infoPanelTitle}>About Smart Campus</h3>
-          <p style={infoPanelText}>
-            Smart Campus combines your academic tools and campus services into one modern platform — built specifically for IAU Computer Science students.
-          </p>
-        </div>
-        <div style={{ ...infoPanel, background: "linear-gradient(135deg, #0f172a, #1e293b)", border: "none" }}>
-          <h3 style={{ ...infoPanelTitle, color: "white" }}>Getting Started</h3>
-          <p style={{ ...infoPanelText, color: "rgba(255,255,255,0.65)" }}>
-            Head to <strong style={{ color: "#60a5fa" }}>Classrooms</strong> to set up your rooms, then build your <strong style={{ color: "#c084fc" }}>Schedule</strong>. The parking page will automatically pull your class times.
-          </p>
-        </div>
-      </div>
-
     </div>
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────────────────────
+/* ================= styles ================= */
+
 const page = {
-  padding: "20px 20px 48px",
-  fontFamily: "'DM Sans', system-ui, sans-serif",
   minHeight: "100vh",
-  maxWidth: "1100px",
+  background: "#f8fafc",
+  padding: "20px",
+};
+
+const container = {
+  width: "100%",
+  maxWidth: "1200px",
   margin: "0 auto",
 };
 
-const headerSection = {
+const headerRow = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "center",
+  gap: "12px",
   flexWrap: "wrap",
-  gap: "16px",
-  marginBottom: "28px",
+  marginBottom: "20px",
 };
 
-const headerLeft = {};
-
-const greetLabel = {
-  fontSize: "14px", fontWeight: "600",
-  color: "#64748b", margin: "0 0 4px",
+const titleStyle = {
+  margin: 0,
+  fontSize: "30px",
+  fontWeight: "800",
+  color: "#0f172a",
 };
 
-const heroName = {
-  fontSize: "clamp(28px, 4vw, 40px)",
-  fontWeight: "800", color: "#0f172a",
-  margin: "0 0 6px", letterSpacing: "-0.8px",
+const subtitleStyle = {
+  marginTop: "6px",
+  color: "#64748b",
 };
 
-const heroDate = {
-  fontSize: "14px", color: "#94a3b8",
-  margin: 0, fontWeight: "500",
-};
-
-const heroBadge = {
-  display: "flex", alignItems: "center", gap: "12px",
-  background: "white", border: "1.5px solid #e2e8f0",
-  borderRadius: "14px", padding: "12px 16px",
-  boxShadow: "0 2px 8px rgba(15,23,42,0.06)",
-};
-
-const heroBadgeIcon = {
-  width: "36px", height: "36px",
+const refreshBtn = {
+  border: "1px solid #cbd5e1",
+  background: "white",
   borderRadius: "10px",
-  background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-  color: "white", fontWeight: "800", fontSize: "14px",
-  display: "flex", alignItems: "center", justifyContent: "center",
+  padding: "10px 14px",
+  cursor: "pointer",
 };
 
-// Stats
+const errorBox = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  border: "1px solid #fca5a5",
+  borderRadius: "10px",
+  padding: "12px",
+  marginBottom: "16px",
+};
+
 const statsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
   gap: "14px",
-  marginBottom: "32px",
+  marginBottom: "20px",
 };
 
 const statCard = {
   background: "white",
-  borderRadius: "16px",
-  padding: "20px",
-  border: "1.5px solid #e2e8f0",
-  boxShadow: "0 2px 8px rgba(15,23,42,0.05)",
-  cursor: "pointer",
+  borderRadius: "14px",
+  padding: "18px",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+};
+
+const statNumber = {
+  fontSize: "28px",
+  fontWeight: "800",
+  color: "#2563eb",
 };
 
 const statLabel = {
-  fontSize: "12px", fontWeight: "700",
-  color: "#94a3b8", textTransform: "uppercase",
-  letterSpacing: "0.06em", margin: "0 0 6px",
+  color: "#64748b",
+  marginTop: "4px",
 };
 
-const statValue = {
-  fontSize: "32px", fontWeight: "800",
-  letterSpacing: "-0.8px", margin: 0,
-  fontFamily: "'DM Mono', monospace",
-};
-
-const statSub = {
-  fontSize: "12px", color: "#94a3b8",
-  margin: "8px 0 0", fontWeight: "500",
-};
-
-const statIcon = {
-  width: "38px", height: "38px",
-  borderRadius: "10px",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  fontSize: "18px", flexShrink: 0,
-};
-
-const overduePill = {
-  display: "inline-flex", alignItems: "center", gap: "5px",
-  marginTop: "8px", padding: "3px 10px",
-  borderRadius: "999px",
-  background: "#fef2f2", color: "#dc2626",
-  fontSize: "11px", fontWeight: "700",
-};
-
-// Nav cards
-const sectionHead = {
-  marginBottom: "16px",
-};
-
-const sectionTitle = {
-  fontSize: "20px", fontWeight: "800",
-  color: "#0f172a", margin: "0 0 4px",
-};
-
-const sectionSub = {
-  fontSize: "14px", color: "#64748b", margin: 0,
-};
-
-const navGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: "14px",
-  marginBottom: "28px",
-};
-
-const navCard = {
+const loadingBox = {
   background: "white",
-  borderRadius: "18px",
-  padding: "22px",
-  boxShadow: "0 2px 8px rgba(15,23,42,0.05)",
-  position: "relative",
+  borderRadius: "14px",
+  padding: "30px",
+  textAlign: "center",
+  color: "#64748b",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
 };
 
-const navIcon = {
-  width: "46px", height: "46px",
-  borderRadius: "13px",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  fontSize: "22px", marginBottom: "14px",
-};
-
-const navTitle = {
-  fontSize: "17px", fontWeight: "800",
-  margin: "0 0 8px",
-};
-
-const navDesc = {
-  fontSize: "13px", color: "#64748b",
-  lineHeight: "1.65", margin: "0 0 14px",
-};
-
-const navArrow = {
-  fontSize: "16px", fontWeight: "700",
-};
-
-// Bottom
-const bottomGrid = {
+const contentGrid = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: "14px",
+  gap: "16px",
 };
 
-const infoPanel = {
+const card = {
   background: "white",
-  borderRadius: "16px",
-  padding: "22px",
-  border: "1.5px solid #e2e8f0",
-  boxShadow: "0 2px 8px rgba(15,23,42,0.05)",
+  borderRadius: "14px",
+  padding: "18px",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
 };
 
-const infoPanelTitle = {
-  fontSize: "16px", fontWeight: "800",
-  color: "#0f172a", margin: "0 0 10px",
+const cardTitle = {
+  marginTop: 0,
+  marginBottom: "14px",
+  color: "#0f172a",
 };
 
-const infoPanelText = {
-  fontSize: "14px", color: "#64748b",
-  lineHeight: "1.7", margin: 0,
+const list = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "10px",
+};
+
+const scheduleItem = {
+  background: "#f8fafc",
+  borderRadius: "10px",
+  padding: "12px",
+};
+
+const taskItem = {
+  background: "#f8fafc",
+  borderRadius: "10px",
+  padding: "12px",
+};
+
+const highlightBox = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  borderRadius: "12px",
+  padding: "14px",
+};
+
+const itemTitle = {
+  fontWeight: "700",
+  color: "#0f172a",
+  marginBottom: "6px",
+};
+
+const metaText = {
+  fontSize: "13px",
+  color: "#64748b",
+  marginBottom: "4px",
+};
+
+const emptyText = {
+  color: "#64748b",
+  fontSize: "14px",
 };

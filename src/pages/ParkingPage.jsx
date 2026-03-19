@@ -1,50 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 
-const API = "https://smart-campus-backend-bbmo.onrender.com";
-const getHeaders = () => { const t = localStorage.getItem("token"); return t ? { Authorization: `Bearer ${t}` } : {}; };
+const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
 
-// ─── Parking zones data ───────────────────────────────────────────────────────
-const ZONES_DEFAULT = [
-  {
-    id: "main-gate",
-    name: "Main Gate",
-    nameEn: "Main Gate",
-    description: "In front of the main gate — divided for students",
-    icon: "🚪",
-    total: 30,
-    occupied: 0,
-  },
-  {
-    id: "right-gate",
-    name: "Right Gate",
-    nameEn: "Right Gate",
-    description: "Near Lab 3",
-    icon: "🔬",
-    total: 50,
-    occupied: 0,
-  },
-  {
-    id: "lab1",
-    name: "Near Lab 1",
-    nameEn: "Lab 1 Area",
-    description: "Students only",
-    icon: "🧪",
-    total: 45,
-    occupied: 0,
-  },
-  {
-    id: "new-parking",
-    name: "New Parking",
-    nameEn: "New Parking",
-    description: "Across from the college — requires crossing the road",
-    icon: "🏗",
-    total: 60,
-    occupied: 0,
-  },
-];
+const getHeaders = () => {
+  const t = localStorage.getItem("token");
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const getStatusColor = (pct) => {
   if (pct >= 90) {
     return {
@@ -89,64 +52,99 @@ const formatTime = (timeStr) => {
   return `${hour}:${m.toString().padStart(2, "0")} ${suffix}`;
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function ParkingPage() {
-  const [zones, setZones] = useState(() => {
-    const saved = localStorage.getItem("parking_zones_v2");
-    return saved ? JSON.parse(saved) : ZONES_DEFAULT;
-  });
+  const [zones, setZones] = useState([]);
   const [mySession, setMySession] = useState(null);
+  const [schedule, setSchedule] = useState([]);
   const [toast, setToast] = useState("");
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [loadingZones, setLoadingZones] = useState(true);
+  const [autoReleasePrompt, setAutoReleasePrompt] = useState(false);
 
-  // Load schedule from localStorage (synced by SchedulePage)
-  const schedule = useMemo(() => {
-    const saved = localStorage.getItem(`schedule_${localStorage.getItem("userName") || "guest"}`);
-    return saved ? JSON.parse(saved) : [];
-  }, []);
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2800);
+  };
 
-  // Load zones and my session from API
   const refreshZones = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/parking-zones`);
-      const apiZones = res.data.map(z => ({
-        id:          z.id,
-        name:        z.name,
+      const apiZones = res.data.map((z) => ({
+        id: z.id,
+        name: z.name,
         description: z.description,
-        icon:        z.icon,
-        total:       z.total,
-        occupied:    z.occupied,
+        icon: z.icon || "🅿️",
+        total: z.total,
+        occupied: z.occupied,
       }));
       setZones(apiZones);
-      localStorage.setItem("parking_zones_v2", JSON.stringify(apiZones));
-    } catch {
-      const saved = localStorage.getItem("parking_zones_v2");
-      if (saved) setZones(JSON.parse(saved));
-    } finally { setLoadingZones(false); }
+    } catch (err) {
+      console.error("Failed to load parking zones:", err);
+      setZones([]);
+    } finally {
+      setLoadingZones(false);
+    }
   }, []);
 
   const refreshSession = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/parking-zones/my-session`, { headers: getHeaders() });
+      const res = await axios.get(`${API}/parking-zones/my-session`, {
+        headers: getHeaders(),
+      });
+
       if (res.data.active) {
-        setMySession({ zoneId: res.data.zoneId, checkedInAt: res.data.checkedInAt });
+        setMySession({
+          zoneId: res.data.zoneId,
+          checkedInAt: res.data.checkedInAt,
+          endTime: res.data.endTime || null,
+          courseName: res.data.courseName || null,
+        });
       } else {
         setMySession(null);
       }
-    } catch { setMySession(null); }
+    } catch (err) {
+      console.error("Failed to load parking session:", err);
+      setMySession(null);
+    }
+  }, []);
+
+  const refreshSchedule = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/schedule`, {
+        headers: getHeaders(),
+      });
+
+      const entries = res.data.map((e) => ({
+        id: e.id,
+        courseName: e.courseName,
+        day: e.dayOfWeek,
+        time: `${e.startTime} - ${e.endTime}`,
+        room: e.room || e.classroom?.name || "",
+        color: e.color,
+      }));
+
+      setSchedule(entries);
+    } catch (err) {
+      console.error("Failed to load schedule for parking page:", err);
+      setSchedule([]);
+    }
   }, []);
 
   useEffect(() => {
-    refreshZones();
-    refreshSession();
-    // Auto-refresh zones every 15 seconds (real-time)
-    const interval = setInterval(refreshZones, 15000);
-    return () => clearInterval(interval);
-  }, [refreshZones, refreshSession]);
+    const loadAll = async () => {
+      await Promise.all([refreshZones(), refreshSession(), refreshSchedule()]);
+    };
 
-  // ── Auto-release: if student's class ended, suggest leaving ──
-  const [autoReleasePrompt, setAutoReleasePrompt] = useState(false);
+    loadAll();
+
+    const interval = setInterval(() => {
+      refreshZones();
+      refreshSession();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [refreshZones, refreshSession, refreshSchedule]);
+
   useEffect(() => {
     if (!mySession?.endTime) return;
 
@@ -165,51 +163,61 @@ export default function ParkingPage() {
     return () => clearInterval(interval);
   }, [mySession, autoReleasePrompt]);
 
-  const saveZones = (updated) => {
-    setZones(updated);
-    localStorage.setItem("parking_zones_v2", JSON.stringify(updated));
-  };
-
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2800);
-  };
-
-  // ── Check in ──
   const checkIn = async (zoneId, endTime, courseName) => {
     const zone = zones.find((z) => z.id === zoneId);
     if (!zone) return;
-    if (zone.occupied >= zone.total) { showToast("This zone is full!"); return; }
+
+    if (zone.occupied >= zone.total) {
+      showToast("This zone is full!");
+      return;
+    }
 
     try {
-      const res = await axios.post(`${API}/parking-zones/checkin/${zoneId}`, {}, { headers: getHeaders() });
-      if (!res.data.success) { showToast(res.data.message || "Check-in failed"); return; }
-      setMySession({ zoneId, endTime: endTime||null, courseName: courseName||null, checkedInAt: res.data.checkedInAt });
+      const res = await axios.post(
+        `${API}/parking-zones/checkin/${zoneId}`,
+        {},
+        { headers: getHeaders() }
+      );
+
+      if (!res.data.success) {
+        showToast(res.data.message || "Check-in failed");
+        return;
+      }
+
+      setMySession({
+        zoneId,
+        endTime: endTime || null,
+        courseName: courseName || null,
+        checkedInAt: res.data.checkedInAt,
+      });
+
       await refreshZones();
-    } catch {
-      // Fallback offline
-      const updated = zones.map((z) => z.id === zoneId ? { ...z, occupied: z.occupied + 1 } : z);
-      saveZones(updated);
-      setMySession({ zoneId, endTime: endTime||null, courseName: courseName||null });
+      showToast(`✅ Checked in at ${zone.name}`);
+    } catch (err) {
+      console.error("Check-in failed:", err);
+      showToast("❌ Failed to check in.");
     }
-    setAutoReleasePrompt(false);
-    showToast(`✅ Checked in at ${zone.name}`);
   };
 
-  // ── Check out ──
   const checkOut = async () => {
     if (!mySession) return;
+
     try {
-      await axios.delete(`${API}/parking-zones/checkout`, { headers: getHeaders() });
-    } catch {}
-    setMySession(null);
-    await refreshZones();
-    setConfirmLeave(false);
-    setAutoReleasePrompt(false);
-    showToast("✅ You have checked out");
+      await axios.delete(`${API}/parking-zones/checkout`, {
+        headers: getHeaders(),
+      });
+
+      setMySession(null);
+      await refreshZones();
+      setConfirmLeave(false);
+      setAutoReleasePrompt(false);
+      showToast("✅ You have checked out");
+    } catch (err) {
+      console.error("Checkout failed:", err);
+      showToast("❌ Failed to check out.");
+    }
   };
 
-  // ── Today's schedule for suggestion ──
   const days = [
     "Sunday",
     "Monday",
@@ -223,7 +231,6 @@ export default function ParkingPage() {
   const todayName = days[new Date().getDay()];
   const todayClasses = schedule.filter((s) => s.day === todayName);
 
-  // Find next class end time
   const nextClassEnd = useMemo(() => {
     const now = getCurrentMinutes();
 
@@ -231,9 +238,7 @@ export default function ParkingPage() {
       .map((c) => {
         const parts = c.time?.split("-").map((t) => t.trim());
         const endStr = parts?.[1];
-        const endMin = parseTimeToMinutes(
-          endStr?.includes(":") ? endStr : null
-        );
+        const endMin = parseTimeToMinutes(endStr?.includes(":") ? endStr : null);
         return { ...c, endMin, endStr };
       })
       .filter((c) => c.endMin && c.endMin > now)
@@ -248,18 +253,39 @@ export default function ParkingPage() {
     <div style={page}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
-        .zone-card { transition: box-shadow 0.2s, transform 0.2s; }
-        .zone-card:hover { box-shadow: 0 12px 32px rgba(15,23,42,0.12); transform: translateY(-2px); }
-        .checkin-btn { transition: filter 0.15s, transform 0.1s; }
-        .checkin-btn:hover { filter: brightness(1.08); }
-        .checkin-btn:active { transform: scale(0.97); }
+
+        .zone-card {
+          transition: box-shadow 0.2s, transform 0.2s;
+        }
+        .zone-card:hover {
+          box-shadow: 0 12px 32px rgba(15,23,42,0.12);
+          transform: translateY(-2px);
+        }
+
+        .checkin-btn {
+          transition: filter 0.15s, transform 0.1s;
+        }
+        .checkin-btn:hover {
+          filter: brightness(1.08);
+        }
+        .checkin-btn:active {
+          transform: scale(0.97);
+        }
+
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
+          to   { opacity: 1; transform: translateY(0); }
         }
+
         @keyframes pulse {
-          0%, 100% { opacity: 1; }
+          0%,100% { opacity: 1; }
           50% { opacity: 0.6; }
+        }
+
+        @media (max-width: 700px) {
+          .zones-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
       `}</style>
 
@@ -271,7 +297,8 @@ export default function ParkingPage() {
             Class time is over. Did you leave the{" "}
             <strong>{myZone?.name}</strong> parking area?
           </span>
-          <div style={{ display: "flex", gap: "10px" }}>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button onClick={checkOut} style={bannerBtnGreen}>
               Yes, I left
             </button>
@@ -295,648 +322,386 @@ export default function ParkingPage() {
           </div>
 
           <div style={totalAvailBadge}>
-            <span
-              style={{
-                fontSize: "28px",
-                fontWeight: "800",
-                color: "#16a34a",
-                fontFamily: "'DM Sans'",
-              }}
-            >
+            <span style={availNum}>
               {zones.reduce((sum, z) => sum + (z.total - z.occupied), 0)}
             </span>
-            <span
-              style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}
-            >
-              Available Spots
-            </span>
+            <span style={availLabel}>Available Spots</span>
           </div>
         </div>
 
         {mySession && myZone && (
           <div style={mySessionCard}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                flexWrap: "wrap",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
               <div style={{ fontSize: "36px" }}>{myZone.icon}</div>
               <div style={{ flex: 1 }}>
-                <p
-                  style={{
-                    margin: 0,
-                    fontWeight: "700",
-                    fontSize: "16px",
-                    color: "#0f172a",
-                  }}
-                >
+                <p style={sessionTitle}>
                   You are currently parked at:{" "}
                   <span style={{ color: "#2563eb" }}>{myZone.name}</span>
                 </p>
 
                 {mySession.courseName && (
-                  <p
-                    style={{
-                      margin: "4px 0 0",
-                      fontSize: "13px",
-                      color: "#64748b",
-                    }}
-                  >
+                  <p style={sessionSub}>
                     Course: {mySession.courseName}
-                    {mySession.endTime &&
-                      ` — Ends at ${formatTime(mySession.endTime)}`}
+                    {mySession.endTime && ` — Ends at ${formatTime(mySession.endTime)}`}
+                  </p>
+                )}
+
+                {mySession.checkedInAt && (
+                  <p style={sessionSub}>
+                    Checked in at: {new Date(mySession.checkedInAt).toLocaleString()}
                   </p>
                 )}
               </div>
 
-              <button
-                className="checkin-btn"
-                onClick={() => setConfirmLeave(true)}
-                style={leaveBtn}
-              >
+              <button style={leaveBtn} onClick={() => setConfirmLeave(true)}>
                 Check Out
               </button>
             </div>
           </div>
         )}
 
+        {!mySession && nextClassEnd && (
+          <div style={hintCard}>
+            <strong>Suggested parking time:</strong>{" "}
+            Your next class is <strong>{nextClassEnd.courseName}</strong> and ends at{" "}
+            <strong>{formatTime(nextClassEnd.endStr)}</strong>. You can use this when checking in.
+          </div>
+        )}
+
         {confirmLeave && (
-          <div style={overlay}>
-            <div style={modal}>
-              <p
-                style={{
-                  fontWeight: "700",
-                  fontSize: "18px",
-                  margin: "0 0 8px",
-                }}
-              >
-                Confirm Leaving
-              </p>
-              <p style={{ color: "#64748b", margin: "0 0 20px" }}>
-                Are you sure you left <strong>{myZone?.name}</strong>?
-              </p>
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button onClick={checkOut} style={modalBtnGreen}>
-                  Yes, I left
-                </button>
-                <button
-                  onClick={() => setConfirmLeave(false)}
-                  style={modalBtnGray}
-                >
-                  Cancel
-                </button>
-              </div>
+          <div style={confirmBox}>
+            <p style={{ margin: "0 0 12px", fontWeight: "700", color: "#0f172a" }}>
+              Are you sure you want to check out?
+            </p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={checkOut} style={bannerBtnGreen}>Yes</button>
+              <button onClick={() => setConfirmLeave(false)} style={bannerBtnGray}>Cancel</button>
             </div>
           </div>
         )}
 
-        <div style={grid}>
-          {zones.map((zone) => {
-            const available = zone.total - zone.occupied;
-            const pct = Math.round((zone.occupied / zone.total) * 100);
-            const status = getStatusColor(pct);
-            const isMyZone = mySession?.zoneId === zone.id;
-            const isFull = available === 0;
+        {loadingZones ? (
+          <div style={loadingState}>Loading parking zones...</div>
+        ) : (
+          <div className="zones-grid" style={zonesGrid}>
+            {zones.map((zone) => {
+              const available = zone.total - zone.occupied;
+              const pct = zone.total ? Math.round((zone.occupied / zone.total) * 100) : 0;
+              const status = getStatusColor(pct);
+              const disabled = !!mySession || available <= 0;
 
-            return (
-              <ZoneCard
-                key={zone.id}
-                zone={zone}
-                available={available}
-                pct={pct}
-                status={status}
-                isMyZone={isMyZone}
-                isFull={isFull}
-                hasSession={!!mySession}
-                nextClassEnd={nextClassEnd}
-                onCheckIn={checkIn}
-              />
-            );
-          })}
-        </div>
+              return (
+                <div key={zone.id} className="zone-card" style={zoneCard}>
+                  <div style={zoneTop}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ fontSize: "30px" }}>{zone.icon || "🅿️"}</div>
+                      <div>
+                        <h3 style={zoneTitle}>{zone.name}</h3>
+                        <p style={zoneDesc}>{zone.description}</p>
+                      </div>
+                    </div>
 
-        <div style={legend}>
-          <span style={legendItem("🟢")}>Available</span>
-          <span style={legendItem("🟡")}>Filling Up</span>
-          <span style={legendItem("🔴")}>Almost Full</span>
-          <span
-            style={{ color: "#94a3b8", fontSize: "12px", marginRight: "auto" }}
-          >
-            * Numbers reflect student check-ins
-          </span>
-        </div>
+                    <span
+                      style={{
+                        ...statusBadge,
+                        background: status.badge,
+                        color: status.text,
+                      }}
+                    >
+                      {status.label}
+                    </span>
+                  </div>
+
+                  <div style={meterWrap}>
+                    <div style={meterBg}>
+                      <div
+                        style={{
+                          ...meterFill,
+                          width: `${pct}%`,
+                          background: status.bar,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={zoneStats}>
+                    <span>{available} available</span>
+                    <span>{zone.occupied}/{zone.total} occupied</span>
+                  </div>
+
+                  <button
+                    className="checkin-btn"
+                    style={{
+                      ...checkinBtn,
+                      opacity: disabled ? 0.55 : 1,
+                      cursor: disabled ? "not-allowed" : "pointer",
+                    }}
+                    disabled={disabled}
+                    onClick={() =>
+                      checkIn(
+                        zone.id,
+                        nextClassEnd?.endStr || null,
+                        nextClassEnd?.courseName || null
+                      )
+                    }
+                  >
+                    {mySession
+                      ? "Already Parked"
+                      : available <= 0
+                      ? "Full"
+                      : "Check In"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ─── Zone Card ────────────────────────────────────────────────────────────────
-function ZoneCard({
-  zone,
-  available,
-  pct,
-  status,
-  isMyZone,
-  isFull,
-  hasSession,
-  nextClassEnd,
-  onCheckIn,
-}) {
-  const [showForm, setShowForm] = useState(false);
-  const [selectedEnd, setSelectedEnd] = useState(nextClassEnd?.endStr || "");
-  const [selectedCourse, setSelectedCourse] = useState(
-    nextClassEnd?.courseName || ""
-  );
+/* ================= styles ================= */
 
-  useEffect(() => {
-    if (nextClassEnd) {
-      setSelectedEnd(nextClassEnd.endStr || "");
-      setSelectedCourse(nextClassEnd.courseName || "");
-    }
-  }, [nextClassEnd]);
-
-  const handleCheckIn = () => {
-    onCheckIn(zone.id, selectedEnd, selectedCourse);
-    setShowForm(false);
-  };
-
-  return (
-    <div
-      className="zone-card"
-      style={{
-        background: "white",
-        borderRadius: "20px",
-        padding: "22px",
-        border: isMyZone ? "2px solid #2563eb" : "1.5px solid #e2e8f0",
-        boxShadow: isMyZone
-          ? "0 0 0 4px rgba(37,99,235,0.1)"
-          : "0 2px 8px rgba(15,23,42,0.05)",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: "4px",
-          background: status.bar,
-          borderRadius: "20px 20px 0 0",
-        }}
-      />
-
-      {isMyZone && (
-        <div
-          style={{
-            position: "absolute",
-            top: "14px",
-            left: "14px",
-            background: "#2563eb",
-            color: "white",
-            fontSize: "11px",
-            fontWeight: "700",
-            padding: "3px 10px",
-            borderRadius: "999px",
-            animation: "pulse 2s infinite",
-          }}
-        >
-          You Are Here
-        </div>
-      )}
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: "12px",
-          marginBottom: "14px",
-          marginTop: isMyZone ? "20px" : "0",
-        }}
-      >
-        <div style={{ fontSize: "32px", lineHeight: 1 }}>{zone.icon}</div>
-        <div>
-          <h3
-            style={{
-              margin: "0 0 4px",
-              fontSize: "17px",
-              fontWeight: "700",
-              color: "#0f172a",
-            }}
-          >
-            {zone.name}
-          </h3>
-          <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>
-            {zone.description}
-          </p>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "10px",
-        }}
-      >
-        <div>
-          <span
-            style={{
-              fontSize: "32px",
-              fontWeight: "800",
-              color: isFull ? "#dc2626" : "#0f172a",
-              fontFamily: "'DM Sans'",
-            }}
-          >
-            {available}
-          </span>
-          <span
-            style={{ fontSize: "14px", color: "#94a3b8", marginRight: "6px" }}
-          >
-            / {zone.total} Available
-          </span>
-        </div>
-
-        <span
-          style={{
-            padding: "5px 12px",
-            borderRadius: "999px",
-            background: status.badge,
-            color: status.text,
-            fontSize: "12px",
-            fontWeight: "700",
-          }}
-        >
-          {status.label}
-        </span>
-      </div>
-
-      <div
-        style={{
-          background: "#f1f5f9",
-          borderRadius: "999px",
-          height: "8px",
-          marginBottom: "18px",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            borderRadius: "999px",
-            width: `${pct}%`,
-            background: status.bar,
-            transition: "width 0.4s ease",
-          }}
-        />
-      </div>
-
-      {!hasSession && !isFull && (
-        <>
-          {!showForm ? (
-            <button
-              className="checkin-btn"
-              onClick={() => setShowForm(true)}
-              style={checkInBtn}
-            >
-              I Parked Here
-            </button>
-          ) : (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-            >
-              <input
-                type="text"
-                placeholder="Course name (optional)"
-                value={selectedCourse}
-                onChange={(e) => setSelectedCourse(e.target.value)}
-                style={formInput}
-              />
-
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <label
-                  style={{
-                    fontSize: "12px",
-                    color: "#64748b",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  End time:
-                </label>
-                <input
-                  type="time"
-                  value={selectedEnd}
-                  onChange={(e) => setSelectedEnd(e.target.value)}
-                  style={{ ...formInput, flex: 1 }}
-                />
-              </div>
-
-              {nextClassEnd && (
-                <p style={{ margin: 0, fontSize: "11px", color: "#2563eb" }}>
-                  Auto-filled from your schedule: {nextClassEnd.courseName} ends
-                  at {formatTime(nextClassEnd.endStr)}
-                </p>
-              )}
-
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  className="checkin-btn"
-                  onClick={handleCheckIn}
-                  style={confirmBtn}
-                >
-                  Confirm
-                </button>
-                <button onClick={() => setShowForm(false)} style={cancelBtn}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {isFull && (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "10px",
-            background: "#fef2f2",
-            borderRadius: "10px",
-            color: "#dc2626",
-            fontSize: "13px",
-            fontWeight: "600",
-          }}
-        >
-          Parking is currently full
-        </div>
-      )}
-
-      {hasSession && !isMyZone && (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "10px",
-            background: "#f8fafc",
-            borderRadius: "10px",
-            color: "#94a3b8",
-            fontSize: "13px",
-          }}
-        >
-          You are checked in at another zone
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const page = {
-  padding: "24px 20px 40px",
-  boxSizing: "border-box",
-  fontFamily: "'DM Sans', sans-serif",
   minHeight: "100vh",
-
+  background: "#f8fafc",
+  padding: "20px",
+  fontFamily: "'DM Sans', sans-serif",
 };
 
-const container = { maxWidth: "1000px", margin: "0 auto" };
+const container = {
+  width: "100%",
+  maxWidth: "1180px",
+  margin: "0 auto",
+};
 
 const headerRow = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "center",
   flexWrap: "wrap",
   gap: "16px",
-  marginBottom: "22px",
+  marginBottom: "24px",
 };
 
 const titleStyle = {
+  margin: 0,
   fontSize: "32px",
   fontWeight: "800",
   color: "#0f172a",
-  margin: "0 0 4px",
 };
 
-const subtitleStyle = { color: "#64748b", fontSize: "14px", margin: 0 };
+const subtitleStyle = {
+  margin: "6px 0 0",
+  color: "#64748b",
+  fontSize: "15px",
+};
 
 const totalAvailBadge = {
   background: "white",
-  border: "1.5px solid #e2e8f0",
-  borderRadius: "14px",
-  padding: "12px 18px",
+  border: "1px solid #e2e8f0",
+  borderRadius: "16px",
+  padding: "14px 18px",
+  boxShadow: "0 4px 14px rgba(15,23,42,0.06)",
+  minWidth: "140px",
   textAlign: "center",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  boxShadow: "0 2px 8px rgba(15,23,42,0.05)",
+};
+
+const availNum = {
+  fontSize: "28px",
+  fontWeight: "800",
+  color: "#16a34a",
+};
+
+const availLabel = {
+  fontSize: "12px",
+  color: "#64748b",
+  marginTop: "2px",
 };
 
 const mySessionCard = {
-  background: "linear-gradient(135deg, #eff6ff, #dbeafe)",
-  border: "1.5px solid #bfdbfe",
+  background: "white",
+  border: "1px solid #dbeafe",
   borderRadius: "16px",
   padding: "18px",
-  marginBottom: "22px",
-  animation: "fadeUp 0.3s ease",
+  marginBottom: "18px",
+  boxShadow: "0 4px 14px rgba(37,99,235,0.08)",
+};
+
+const sessionTitle = {
+  margin: 0,
+  fontWeight: "700",
+  fontSize: "16px",
+  color: "#0f172a",
+};
+
+const sessionSub = {
+  margin: "4px 0 0",
+  fontSize: "13px",
+  color: "#64748b",
 };
 
 const leaveBtn = {
-  padding: "10px 18px",
-  borderRadius: "10px",
   border: "none",
   background: "#ef4444",
   color: "white",
   fontWeight: "700",
-  fontSize: "14px",
-  cursor: "pointer",
-  fontFamily: "'DM Sans', sans-serif",
-  whiteSpace: "nowrap",
-};
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-  gap: "18px",
-  marginBottom: "20px",
-};
-
-const checkInBtn = {
-  width: "100%",
-  padding: "11px",
   borderRadius: "10px",
-  border: "none",
-  background: "#2563eb",
-  color: "white",
-  fontWeight: "700",
-  fontSize: "14px",
+  padding: "10px 14px",
   cursor: "pointer",
-  fontFamily: "'DM Sans', sans-serif",
-  boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
 };
 
-const formInput = {
-  padding: "10px 12px",
-  borderRadius: "8px",
-  border: "1.5px solid #e2e8f0",
-  fontSize: "13px",
-  background: "#f8fafc",
-  color: "#0f172a",
-  fontFamily: "'DM Sans', sans-serif",
-  width: "100%",
-  boxSizing: "border-box",
+const hintCard = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1e3a8a",
+  borderRadius: "14px",
+  padding: "14px 16px",
+  marginBottom: "18px",
 };
 
-const confirmBtn = {
-  flex: 1,
-  padding: "10px",
-  borderRadius: "8px",
-  border: "none",
-  background: "#22c55e",
-  color: "white",
-  fontWeight: "700",
-  cursor: "pointer",
-  fontSize: "13px",
-  fontFamily: "'DM Sans', sans-serif",
-};
-
-const cancelBtn = {
-  flex: 1,
-  padding: "10px",
-  borderRadius: "8px",
-  border: "1.5px solid #e2e8f0",
+const confirmBox = {
   background: "white",
-  color: "#64748b",
-  fontWeight: "600",
-  cursor: "pointer",
-  fontSize: "13px",
-  fontFamily: "'DM Sans', sans-serif",
+  border: "1px solid #e2e8f0",
+  borderRadius: "14px",
+  padding: "16px",
+  marginBottom: "18px",
 };
 
-const legend = {
-  display: "flex",
+const zonesGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: "16px",
-  alignItems: "center",
-  flexWrap: "wrap",
-  padding: "12px 16px",
-  background: "white",
-  borderRadius: "12px",
-  border: "1.5px solid #e2e8f0",
 };
 
-const legendItem = () => ({
+const zoneCard = {
+  background: "white",
+  borderRadius: "18px",
+  padding: "18px",
+  border: "1px solid #e2e8f0",
+  boxShadow: "0 4px 16px rgba(15,23,42,0.05)",
+};
+
+const zoneTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "12px",
+  marginBottom: "14px",
+  flexWrap: "wrap",
+};
+
+const zoneTitle = {
+  margin: 0,
+  fontSize: "18px",
+  fontWeight: "800",
+  color: "#0f172a",
+};
+
+const zoneDesc = {
+  margin: "4px 0 0",
+  fontSize: "13px",
+  color: "#64748b",
+};
+
+const statusBadge = {
+  padding: "6px 10px",
+  borderRadius: "999px",
+  fontSize: "12px",
+  fontWeight: "700",
+};
+
+const meterWrap = {
+  marginBottom: "10px",
+};
+
+const meterBg = {
+  height: "10px",
+  borderRadius: "999px",
+  background: "#e2e8f0",
+  overflow: "hidden",
+};
+
+const meterFill = {
+  height: "100%",
+  borderRadius: "999px",
+};
+
+const zoneStats = {
+  display: "flex",
+  justifyContent: "space-between",
   fontSize: "13px",
   color: "#475569",
-  fontWeight: "500",
-  display: "flex",
-  alignItems: "center",
-  gap: "4px",
-});
+  marginBottom: "14px",
+  gap: "10px",
+  flexWrap: "wrap",
+};
+
+const checkinBtn = {
+  width: "100%",
+  border: "none",
+  borderRadius: "12px",
+  padding: "12px 14px",
+  background: "#2563eb",
+  color: "white",
+  fontWeight: "800",
+};
 
 const toastStyle = {
   position: "fixed",
-  bottom: "28px",
-  left: "50%",
-  transform: "translateX(-50%)",
+  top: "18px",
+  right: "18px",
   background: "#0f172a",
   color: "white",
-  padding: "12px 24px",
-  borderRadius: "999px",
-  fontSize: "14px",
-  fontWeight: "700",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+  padding: "12px 16px",
+  borderRadius: "12px",
   zIndex: 9999,
-  animation: "fadeUp 0.25s ease",
-  fontFamily: "'DM Sans', sans-serif",
+  boxShadow: "0 10px 28px rgba(0,0,0,0.16)",
 };
 
 const bannerStyle = {
-  background: "#fffbeb",
-  border: "1.5px solid #fde68a",
+  background: "#fff7ed",
+  border: "1px solid #fed7aa",
+  color: "#9a3412",
   borderRadius: "14px",
-  padding: "14px 18px",
+  padding: "14px 16px",
+  marginBottom: "18px",
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
+  gap: "14px",
   flexWrap: "wrap",
-  gap: "12px",
-  marginBottom: "16px",
-  fontSize: "14px",
-  color: "#92400e",
-  fontWeight: "600",
-  animation: "fadeUp 0.3s ease",
+  alignItems: "center",
 };
 
 const bannerBtnGreen = {
-  padding: "8px 16px",
-  borderRadius: "8px",
-  border: "none",
-  background: "#22c55e",
+  background: "#16a34a",
   color: "white",
-  fontWeight: "700",
+  border: "none",
+  borderRadius: "10px",
+  padding: "10px 14px",
   cursor: "pointer",
-  fontSize: "13px",
-  fontFamily: "'DM Sans', sans-serif",
+  fontWeight: "700",
 };
 
 const bannerBtnGray = {
-  padding: "8px 16px",
-  borderRadius: "8px",
-  border: "1.5px solid #e2e8f0",
-  background: "white",
-  color: "#64748b",
-  fontWeight: "600",
-  cursor: "pointer",
-  fontSize: "13px",
-  fontFamily: "'DM Sans', sans-serif",
-};
-
-const overlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(15,23,42,0.5)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 9998,
-};
-
-const modal = {
-  background: "white",
-  borderRadius: "18px",
-  padding: "28px",
-  maxWidth: "380px",
-  width: "90%",
-  textAlign: "center",
-  fontFamily: "'DM Sans', sans-serif",
-  boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
-};
-
-const modalBtnGreen = {
-  flex: 1,
-  padding: "12px",
-  borderRadius: "10px",
+  background: "#e5e7eb",
+  color: "#111827",
   border: "none",
-  background: "#22c55e",
-  color: "white",
-  fontWeight: "700",
+  borderRadius: "10px",
+  padding: "10px 14px",
   cursor: "pointer",
-  fontSize: "15px",
-  fontFamily: "'DM Sans', sans-serif",
+  fontWeight: "700",
 };
 
-const modalBtnGray = {
-  flex: 1,
-  padding: "12px",
-  borderRadius: "10px",
-  border: "1.5px solid #e2e8f0",
-  background: "white",
+const loadingState = {
+  textAlign: "center",
   color: "#64748b",
-  fontWeight: "600",
-  cursor: "pointer",
-  fontSize: "15px",
-  fontFamily: "'DM Sans', sans-serif",
+  padding: "50px 20px",
+  background: "white",
+  borderRadius: "16px",
+  border: "1px solid #e2e8f0",
 };

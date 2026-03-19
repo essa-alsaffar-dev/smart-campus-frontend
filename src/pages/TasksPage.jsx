@@ -1,222 +1,574 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import axios from "axios";
 
-const API = "https://smart-campus-backend-bbmo.onrender.com";
-const PRIORITIES = ["Low", "Medium", "High"];
-const priorityConfig = {
-  High:   { color:"#dc2626", bg:"#fef2f2", border:"#fecaca", icon:"🔴" },
-  Medium: { color:"#d97706", bg:"#fffbeb", border:"#fde68a", icon:"🟡" },
-  Low:    { color:"#16a34a", bg:"#f0fdf4", border:"#bbf7d0", icon:"🟢" },
-};
-
-const mapTask = (t) => ({
-  id:        t.id,
-  title:     t.title,
-  priority:  t.type || "Medium",
-  dueDate:   t.dueDate || "",
-  completed: t.status === "COMPLETED",
-  createdAt: t.createdAt || new Date().toISOString(),
-});
-
-const getHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
 
 export default function TasksPage() {
-  const [tasks,          setTasks]          = useState([]);
-  const [title,          setTitle]          = useState("");
-  const [priority,       setPriority]       = useState("Medium");
-  const [dueDate,        setDueDate]        = useState("");
-  const [filter,         setFilter]         = useState("All");
-  const [priorityFilter, setPriorityFilter] = useState("All");
-  const [toast,          setToast]          = useState("");
-  const [loading,        setLoading]        = useState(true);
-  const [apiError,       setApiError]       = useState(false);
+  const [tasks, setTasks] = useState([]);
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState("Medium");
+  const [dueDate, setDueDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [apiError, setApiError] = useState(false);
+  const [toast, setToast] = useState("");
+
+  const token = localStorage.getItem("token");
+
+  const getHeaders = useCallback(() => {
+    return {
+      Authorization: `Bearer ${token}`,
+    };
+  }, [token]);
+
+  const showToast = (message) => {
+    setToast(message);
+    setTimeout(() => setToast(""), 2200);
+  };
+
+  const mapTask = (task) => ({
+    id: task.id,
+    title: task.title || "",
+    description: task.description || "",
+    priority: task.type || "Medium",
+    dueDate: task.dueDate || "",
+    completed: task.status === "COMPLETED",
+  });
+
+  const loadTasks = useCallback(async () => {
+    setLoading(true);
+    setApiError(false);
+
+    try {
+      const res = await axios.get(`${API}/tasks`, {
+        headers: getHeaders(),
+      });
+
+      const mapped = Array.isArray(res.data) ? res.data.map(mapTask) : [];
+      setTasks(mapped);
+    } catch (err) {
+      console.error("Failed to load tasks:", err);
+      setTasks([]);
+      setApiError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [getHeaders]);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await axios.get(`${API}/tasks`, { headers: getHeaders() });
-        setTasks(res.data.map(mapTask));
-      } catch {
-        setApiError(true);
-        const saved = JSON.parse(localStorage.getItem(`tasks_v2_${localStorage.getItem("userName")||"guest"}`) || "[]");
-        setTasks(saved);
-      } finally { setLoading(false); }
-    };
-    load();
-  }, []);
-
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2200); };
+    loadTasks();
+  }, [loadTasks]);
 
   const addTask = async () => {
-    if (!title.trim()) return;
-    try {
-      const res = await axios.post(`${API}/tasks`, { title:title.trim(), description:"", type:priority, dueDate:dueDate||null }, { headers:getHeaders() });
-      setTasks((p) => [mapTask(res.data), ...p]);
-      showToast("✅ Task added!");
-    } catch {
-      const t = { id:Date.now(), title:title.trim(), priority, dueDate, completed:false, createdAt:new Date().toISOString() };
-      setTasks((p) => { const u=[t,...p]; localStorage.setItem(`tasks_v2_${localStorage.getItem("userName")||"guest"}`,JSON.stringify(u)); return u; });
-      showToast("✅ Task added (offline)");
+    if (!title.trim()) {
+      showToast("Please enter a task title.");
+      return;
     }
-    setTitle(""); setPriority("Medium"); setDueDate("");
+
+    setSaving(true);
+
+    try {
+      const res = await axios.post(
+        `${API}/tasks`,
+        {
+          title: title.trim(),
+          description: "",
+          type: priority,
+          dueDate: dueDate || null,
+        },
+        {
+          headers: getHeaders(),
+        }
+      );
+
+      setTasks((prev) => [mapTask(res.data), ...prev]);
+      setTitle("");
+      setPriority("Medium");
+      setDueDate("");
+      showToast("✅ Task added!");
+    } catch (err) {
+      console.error("Failed to add task:", err);
+      showToast("❌ Failed to save task.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleComplete = async (task) => {
-    if (!task.completed) {
-      try { await axios.patch(`${API}/tasks/${task.id}/complete`, {}, { headers:getHeaders() }); } catch {}
+    if (task.completed) return;
+
+    try {
+      const res = await axios.patch(
+        `${API}/tasks/${task.id}/complete`,
+        {},
+        {
+          headers: getHeaders(),
+        }
+      );
+
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? mapTask(res.data) : t))
+      );
+      showToast("✅ Task completed!");
+    } catch (err) {
+      console.error("Failed to complete task:", err);
+      showToast("❌ Failed to update task.");
     }
-    setTasks((p) => p.map((t) => t.id===task.id ? {...t, completed:!t.completed} : t));
   };
 
   const deleteTask = async (id) => {
-    try { await axios.delete(`${API}/tasks/${id}`, { headers:getHeaders() }); } catch {}
-    setTasks((p) => p.filter((t) => t.id!==id));
-    showToast("🗑 Task deleted.");
+    try {
+      await axios.delete(`${API}/tasks/${id}`, {
+        headers: getHeaders(),
+      });
+
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      showToast("🗑 Task deleted.");
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+      showToast("❌ Failed to delete task.");
+    }
   };
 
   const clearDone = async () => {
-    const done = tasks.filter((t) => t.completed);
-    await Promise.allSettled(done.map((t) => axios.delete(`${API}/tasks/${t.id}`, { headers:getHeaders() })));
-    setTasks((p) => p.filter((t) => !t.completed));
-    showToast("🗑 Completed tasks cleared!");
+    const doneTasks = tasks.filter((t) => t.completed);
+
+    if (!doneTasks.length) {
+      showToast("No completed tasks to clear.");
+      return;
+    }
+
+    try {
+      await Promise.all(
+        doneTasks.map((t) =>
+          axios.delete(`${API}/tasks/${t.id}`, {
+            headers: getHeaders(),
+          })
+        )
+      );
+
+      setTasks((prev) => prev.filter((t) => !t.completed));
+      showToast("🗑 Completed tasks cleared!");
+    } catch (err) {
+      console.error("Failed to clear completed tasks:", err);
+      showToast("❌ Failed to clear completed tasks.");
+    }
   };
 
-  const filteredTasks = useMemo(() => tasks.filter((t) => {
-    const ms = filter==="All"||(filter==="Active"&&!t.completed)||(filter==="Done"&&t.completed);
-    const mp = priorityFilter==="All"||t.priority===priorityFilter;
-    return ms && mp;
-  }), [tasks, filter, priorityFilter]);
+  const filteredTasks = useMemo(() => {
+    if (filter === "completed") return tasks.filter((t) => t.completed);
+    if (filter === "active") return tasks.filter((t) => !t.completed);
+    return tasks;
+  }, [tasks, filter]);
 
-  const counts = useMemo(() => ({ all:tasks.length, active:tasks.filter(t=>!t.completed).length, done:tasks.filter(t=>t.completed).length }), [tasks]);
-  const isOverdue = (d) => d && new Date(d) < new Date(new Date().toDateString());
-  const fmtDate  = (d) => d ? new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : null;
+  const totalTasks = tasks.length;
+  const completedCount = tasks.filter((t) => t.completed).length;
+  const activeCount = totalTasks - completedCount;
 
   return (
-    <div style={{padding:"24px 20px 40px",fontFamily:"'DM Sans',sans-serif",minHeight:"100vh"}}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@500&display=swap');
-        *{box-sizing:border-box}
-        .ti:focus,.ts:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,0.12)}
-        .ab:hover:not(:disabled){filter:brightness(1.08)}.ab:active:not(:disabled){transform:scale(0.97)}
-        .tc{background:white;border-radius:14px;padding:16px 18px;border:1.5px solid #e2e8f0;display:flex;align-items:flex-start;gap:14px;transition:box-shadow 0.18s,opacity 0.18s}
-        .tc:hover{box-shadow:0 6px 20px rgba(15,23,42,0.09)}.tc.done{opacity:0.6;background:#f8fafc}
-        .cb{width:22px;height:22px;border-radius:6px;border:2px solid #cbd5e1;background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-top:2px;transition:background 0.15s,border-color 0.15s}
-        .cb:hover{border-color:#2563eb}.cb.ck{background:#22c55e;border-color:#22c55e;color:white}
-        .db{background:none;border:none;cursor:pointer;color:#cbd5e1;font-size:16px;padding:2px 6px;border-radius:6px;transition:color 0.15s,background 0.15s;flex-shrink:0}
-        .db:hover{color:#ef4444;background:#fef2f2}
-        .fc{padding:7px 16px;border-radius:999px;font-size:13px;font-weight:600;border:1.5px solid #e2e8f0;background:white;cursor:pointer;transition:all 0.15s;font-family:'DM Sans',sans-serif}
-        .fc:hover{border-color:#2563eb;color:#2563eb}.fc.act{background:#2563eb;color:white;border-color:#2563eb;box-shadow:0 4px 12px rgba(37,99,235,0.25)}
-        .tst{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#0f172a;color:white;padding:12px 22px;border-radius:999px;font-size:14px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,0.18);z-index:9999;white-space:nowrap;animation:fiu 0.25s ease}
-        @keyframes fiu{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        .sp{width:18px;height:18px;border:2.5px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block}
-        @media(max-width:600px){.fg{grid-template-columns:1fr!important}.fr{flex-direction:column}.hr{flex-direction:column}}
-      `}</style>
-
-      {toast && <div className="tst">{toast}</div>}
-
-      <div style={{maxWidth:"800px",margin:"0 auto"}}>
-
-        {/* Header */}
-        <div className="hr" style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:"16px",marginBottom:"22px"}}>
+    <div style={page}>
+      <div style={container}>
+        <div style={headerRow}>
           <div>
-            <h1 style={{fontSize:"32px",fontWeight:"700",color:"#0f172a",margin:"0 0 4px",letterSpacing:"-0.5px"}}>Tasks Manager</h1>
-            <p style={{color:"#64748b",fontSize:"15px",margin:0}}>Track your assignments, exams, and deadlines.</p>
+            <h1 style={titleStyle}>Tasks</h1>
+            <p style={subTitle}>Manage your tasks and keep them synced everywhere.</p>
           </div>
-          <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
-            {[{v:counts.active,c:"#2563eb",l:"active"},{v:counts.done,c:"#22c55e",l:"done"}].map(s=>(
-              <div key={s.l} style={{background:"white",border:"1.5px solid #e2e8f0",borderRadius:"10px",padding:"10px 14px",display:"flex",alignItems:"baseline",boxShadow:"0 2px 6px rgba(15,23,42,0.05)",fontFamily:"'DM Mono',monospace",fontSize:"18px"}}>
-                <span style={{color:s.c,fontWeight:"700"}}>{s.v}</span>
-                <span style={{color:"#64748b",fontSize:"12px",marginLeft:"4px"}}>{s.l}</span>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {apiError && (
-          <div style={{background:"#fef9ee",border:"1px solid #fde68a",borderRadius:"10px",padding:"10px 14px",fontSize:"13px",color:"#92400e",marginBottom:"14px"}}>
-            ⚠️ Offline mode — tasks saved locally and will sync when connection is restored.
-          </div>
-        )}
-
-        {/* Form */}
-        <div style={{background:"white",borderRadius:"16px",padding:"18px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 10px rgba(15,23,42,0.05)",marginBottom:"16px"}}>
-          <div className="fg" style={{display:"grid",gridTemplateColumns:"1fr auto auto",gap:"10px",marginBottom:"12px"}}>
-            <input className="ti" type="text" placeholder="Add a new task… (Enter)" style={iSt} value={title} onChange={e=>setTitle(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} />
-            <select className="ts" style={iSt} value={priority} onChange={e=>setPriority(e.target.value)}>
-              {PRIORITIES.map(p=><option key={p} value={p}>{priorityConfig[p].icon} {p}</option>)}
-            </select>
-            <input className="ti" type="date" style={iSt} value={dueDate} onChange={e=>setDueDate(e.target.value)} />
-          </div>
-          <button className="ab" onClick={addTask} disabled={!title.trim()} style={{padding:"11px 22px",borderRadius:"10px",border:"none",background:"#2563eb",color:"white",fontWeight:"700",fontSize:"14px",fontFamily:"'DM Sans',sans-serif",boxShadow:"0 4px 12px rgba(37,99,235,0.25)",cursor:!title.trim()?"not-allowed":"pointer",opacity:!title.trim()?0.5:1,transition:"filter 0.15s,transform 0.1s"}}>
-            + Add Task
+          <button style={refreshBtn} onClick={loadTasks}>
+            ⟳ Refresh
           </button>
         </div>
 
-        {/* Filters */}
-        <div className="fr" style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:"10px",marginBottom:"16px"}}>
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            {["All","Active","Done"].map(f=>(
-              <button key={f} className={`fc${filter===f?" act":""}`} onClick={()=>setFilter(f)}>
-                {f}{f==="All"?` (${counts.all})`:f==="Active"?` (${counts.active})`:` (${counts.done})`}
-              </button>
-            ))}
+        {toast && <div style={toastStyle}>{toast}</div>}
+
+        {apiError && (
+          <div style={errorBox}>
+            Could not load tasks from the server. Please try again.
           </div>
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            {["All",...PRIORITIES].map(p=>{
-              const cfg=priorityConfig[p]; const ia=priorityFilter===p;
-              return <button key={p} className="fc" onClick={()=>setPriorityFilter(p)} style={{background:ia&&cfg?cfg.bg:undefined,color:ia&&cfg?cfg.color:undefined,borderColor:ia&&cfg?cfg.color:undefined}}>{cfg?cfg.icon:"🔘"} {p}</button>;
-            })}
+        )}
+
+        <div style={statsRow}>
+          <div style={statCard}>
+            <div style={statNumber}>{totalTasks}</div>
+            <div style={statLabel}>Total</div>
+          </div>
+          <div style={statCard}>
+            <div style={statNumber}>{activeCount}</div>
+            <div style={statLabel}>Active</div>
+          </div>
+          <div style={statCard}>
+            <div style={statNumber}>{completedCount}</div>
+            <div style={statLabel}>Completed</div>
           </div>
         </div>
 
-        {/* List */}
-        {loading ? (
-          <div style={{textAlign:"center",padding:"48px",color:"#94a3b8"}}>
-            <span className="sp"/><br/><span style={{fontSize:"14px",marginTop:"12px",display:"block"}}>Loading tasks…</span>
-          </div>
-        ) : filteredTasks.length===0 ? (
-          <div style={{textAlign:"center",padding:"50px 20px",background:"white",borderRadius:"16px",border:"1.5px solid #e2e8f0"}}>
-            <div style={{fontSize:"44px",marginBottom:"12px"}}>{tasks.length===0?"📋":"✅"}</div>
-            <p style={{fontWeight:"700",fontSize:"18px",color:"#0f172a",margin:"0 0 6px"}}>{tasks.length===0?"No tasks yet":"No tasks match this filter"}</p>
-            <p style={{color:"#64748b",margin:0}}>{tasks.length===0?"Add your first task above.":"Try switching the filter."}</p>
-          </div>
-        ) : (
-          <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-            {filteredTasks.map(task=>{
-              const cfg=priorityConfig[task.priority]||priorityConfig["Medium"];
-              const ov=!task.completed&&isOverdue(task.dueDate);
-              return (
-                <div key={task.id} className={`tc${task.completed?" done":""}`}>
-                  <button className={`cb${task.completed?" ck":""}`} onClick={()=>toggleComplete(task)}>{task.completed&&"✓"}</button>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:"600",fontSize:"15px",color:task.completed?"#94a3b8":"#0f172a",textDecoration:task.completed?"line-through":"none",marginBottom:"6px",wordBreak:"break-word"}}>{task.title}</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center"}}>
-                      <span style={{padding:"3px 10px",borderRadius:"999px",fontSize:"12px",fontWeight:"700",background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}>{cfg.icon} {task.priority}</span>
-                      {task.dueDate&&<span style={{fontSize:"12px",fontWeight:"600",color:ov?"#dc2626":"#64748b"}}>{ov?"⚠️":"📅"} {fmtDate(task.dueDate)}{ov&&" — Overdue"}</span>}
-                    </div>
-                  </div>
-                  <button className="db" onClick={()=>deleteTask(task.id)}>✕</button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div style={formCard}>
+          <h3 style={sectionTitle}>Add New Task</h3>
 
-        {counts.done>0&&!loading&&(
-          <div style={{marginTop:"20px",textAlign:"right"}}>
-            <button onClick={clearDone} style={{background:"none",border:"1.5px solid #fecaca",color:"#dc2626",padding:"9px 16px",borderRadius:"10px",fontSize:"13px",fontWeight:"600",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
-              🗑 Clear {counts.done} completed {counts.done===1?"task":"tasks"}
+          <input
+            style={input}
+            type="text"
+            placeholder="Task title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+
+          <div style={row}>
+            <select
+              style={input}
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+            >
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+
+            <input
+              style={input}
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+          </div>
+
+          <button style={primaryBtn} onClick={addTask} disabled={saving}>
+            {saving ? "Saving..." : "Add Task"}
+          </button>
+        </div>
+
+        <div style={toolbar}>
+          <div style={filters}>
+            <button
+              style={filter === "all" ? activeFilterBtn : filterBtn}
+              onClick={() => setFilter("all")}
+            >
+              All
+            </button>
+            <button
+              style={filter === "active" ? activeFilterBtn : filterBtn}
+              onClick={() => setFilter("active")}
+            >
+              Active
+            </button>
+            <button
+              style={filter === "completed" ? activeFilterBtn : filterBtn}
+              onClick={() => setFilter("completed")}
+            >
+              Completed
             </button>
           </div>
-        )}
+
+          <button style={dangerBtn} onClick={clearDone}>
+            Clear Completed
+          </button>
+        </div>
+
+        <div style={listCard}>
+          <h3 style={sectionTitle}>Your Tasks</h3>
+
+          {loading ? (
+            <div style={emptyState}>Loading tasks...</div>
+          ) : filteredTasks.length === 0 ? (
+            <div style={emptyState}>No tasks found.</div>
+          ) : (
+            <div style={taskList}>
+              {filteredTasks.map((task) => (
+                <div key={task.id} style={taskItem}>
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        ...taskTitle,
+                        textDecoration: task.completed ? "line-through" : "none",
+                        opacity: task.completed ? 0.65 : 1,
+                      }}
+                    >
+                      {task.title}
+                    </div>
+
+                    <div style={taskMeta}>
+                      <span style={priorityBadge(task.priority)}>
+                        {task.priority}
+                      </span>
+                      {task.dueDate && <span>📅 {task.dueDate}</span>}
+                    </div>
+                  </div>
+
+                  <div style={actions}>
+                    {!task.completed && (
+                      <button
+                        style={completeBtn}
+                        onClick={() => toggleComplete(task)}
+                      >
+                        Complete
+                      </button>
+                    )}
+
+                    <button
+                      style={deleteBtn}
+                      onClick={() => deleteTask(task.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-const iSt = {padding:"11px 14px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"14px",background:"#f8fafc",color:"#0f172a",fontFamily:"'DM Sans',sans-serif",transition:"border-color 0.15s,box-shadow 0.15s",width:"100%",boxSizing:"border-box"};
+/* ================== styles ================== */
+
+const page = {
+  minHeight: "100vh",
+  background: "#f8fafc",
+  padding: "20px",
+};
+
+const container = {
+  width: "100%",
+  maxWidth: "1000px",
+  margin: "0 auto",
+};
+
+const headerRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "12px",
+  flexWrap: "wrap",
+  marginBottom: "20px",
+};
+
+const titleStyle = {
+  margin: 0,
+  fontSize: "30px",
+  color: "#0f172a",
+};
+
+const subTitle = {
+  marginTop: "6px",
+  color: "#64748b",
+};
+
+const refreshBtn = {
+  border: "1px solid #cbd5e1",
+  background: "white",
+  borderRadius: "10px",
+  padding: "10px 14px",
+  cursor: "pointer",
+};
+
+const toastStyle = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  borderRadius: "10px",
+  padding: "12px",
+  marginBottom: "16px",
+};
+
+const errorBox = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  border: "1px solid #fca5a5",
+  borderRadius: "10px",
+  padding: "12px",
+  marginBottom: "16px",
+};
+
+const statsRow = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: "14px",
+  marginBottom: "20px",
+};
+
+const statCard = {
+  background: "white",
+  borderRadius: "14px",
+  padding: "18px",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+};
+
+const statNumber = {
+  fontSize: "28px",
+  fontWeight: "800",
+  color: "#2563eb",
+};
+
+const statLabel = {
+  color: "#64748b",
+  marginTop: "4px",
+};
+
+const formCard = {
+  background: "white",
+  borderRadius: "14px",
+  padding: "18px",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+  marginBottom: "20px",
+};
+
+const sectionTitle = {
+  marginTop: 0,
+  color: "#0f172a",
+};
+
+const input = {
+  width: "100%",
+  padding: "12px",
+  borderRadius: "10px",
+  border: "1px solid #dbe2ea",
+  marginBottom: "12px",
+  fontSize: "14px",
+};
+
+const row = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "12px",
+};
+
+const primaryBtn = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  borderRadius: "10px",
+  padding: "12px 16px",
+  cursor: "pointer",
+  fontWeight: "700",
+};
+
+const toolbar = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "12px",
+  flexWrap: "wrap",
+  marginBottom: "16px",
+};
+
+const filters = {
+  display: "flex",
+  gap: "8px",
+  flexWrap: "wrap",
+};
+
+const filterBtn = {
+  background: "white",
+  border: "1px solid #cbd5e1",
+  borderRadius: "999px",
+  padding: "8px 14px",
+  cursor: "pointer",
+};
+
+const activeFilterBtn = {
+  ...filterBtn,
+  background: "#2563eb",
+  color: "white",
+  border: "1px solid #2563eb",
+};
+
+const dangerBtn = {
+  background: "#ef4444",
+  color: "white",
+  border: "none",
+  borderRadius: "10px",
+  padding: "10px 14px",
+  cursor: "pointer",
+};
+
+const listCard = {
+  background: "white",
+  borderRadius: "14px",
+  padding: "18px",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+};
+
+const emptyState = {
+  padding: "30px 10px",
+  textAlign: "center",
+  color: "#64748b",
+};
+
+const taskList = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+};
+
+const taskItem = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "14px",
+  padding: "14px",
+  border: "1px solid #e2e8f0",
+  borderRadius: "12px",
+  flexWrap: "wrap",
+};
+
+const taskTitle = {
+  fontWeight: "700",
+  color: "#0f172a",
+  marginBottom: "8px",
+};
+
+const taskMeta = {
+  display: "flex",
+  gap: "10px",
+  alignItems: "center",
+  flexWrap: "wrap",
+  color: "#64748b",
+  fontSize: "13px",
+};
+
+const priorityBadge = (priority) => ({
+  display: "inline-block",
+  padding: "4px 10px",
+  borderRadius: "999px",
+  fontSize: "12px",
+  fontWeight: "700",
+  background:
+    priority === "High"
+      ? "#fee2e2"
+      : priority === "Medium"
+      ? "#fef3c7"
+      : "#dcfce7",
+  color:
+    priority === "High"
+      ? "#b91c1c"
+      : priority === "Medium"
+      ? "#92400e"
+      : "#166534",
+});
+
+const actions = {
+  display: "flex",
+  gap: "8px",
+  flexWrap: "wrap",
+};
+
+const completeBtn = {
+  background: "#10b981",
+  color: "white",
+  border: "none",
+  borderRadius: "8px",
+  padding: "9px 12px",
+  cursor: "pointer",
+};
+
+const deleteBtn = {
+  background: "#ef4444",
+  color: "white",
+  border: "none",
+  borderRadius: "8px",
+  padding: "9px 12px",
+  cursor: "pointer",
+};
