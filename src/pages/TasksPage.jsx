@@ -1,98 +1,79 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 
 const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
-const getH = () => { const t=localStorage.getItem("token"); return t?{Authorization:`Bearer ${t}`}:{}; };
-
-const getStatus = (pct) => {
-  if (pct>=90) return { bar:"#ef4444", bg:"#fef2f2", text:"#dc2626", label:"Almost Full",  icon:"🔴" };
-  if (pct>=60) return { bar:"#f59e0b", bg:"#fffbeb", text:"#d97706", label:"Filling Up",   icon:"🟡" };
-  return               { bar:"#10b981", bg:"#f0fdf4", text:"#059669", label:"Available",    icon:"🟢" };
+const PRIORITIES = ["Low","Medium","High"];
+const P_CONFIG = {
+  High:   { color:"#ef4444", bg:"#fef2f2", border:"#fecaca", dot:"#ef4444", label:"High"   },
+  Medium: { color:"#f59e0b", bg:"#fffbeb", border:"#fde68a", dot:"#f59e0b", label:"Medium" },
+  Low:    { color:"#22c55e", bg:"#f0fdf4", border:"#bbf7d0", dot:"#22c55e", label:"Low"    },
 };
 
-const pt = t => { if(!t) return null; const [h,m]=t.split(":").map(Number); return h*60+m; };
-const gm = () => { const n=new Date(); return n.getHours()*60+n.getMinutes(); };
-const fmt = t => { if(!t) return ""; const [h,m]=t.split(":").map(Number); return `${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`; };
+const getH = () => { const t=localStorage.getItem("token"); return t?{Authorization:`Bearer ${t}`}:{}; };
+const mapTask = t => ({ id:t.id, title:t.title, priority:t.type||"Medium", dueDate:t.dueDate||"", completed:t.status==="COMPLETED", createdAt:t.createdAt||new Date().toISOString() });
 
-export default function ParkingPage() {
-  const [zones,             setZones]             = useState([]);
-  const [mySession,         setMySession]         = useState(null);
-  const [schedule,          setSchedule]          = useState([]);
-  const [toast,             setToast]             = useState({msg:"",type:"ok"});
-  const [confirmLeave,      setConfirmLeave]      = useState(false);
-  const [loadingZones,      setLoadingZones]      = useState(true);
-  const [autoReleasePrompt, setAutoReleasePrompt] = useState(false);
+export default function TasksPage() {
+  const [tasks,          setTasks]          = useState([]);
+  const [title,          setTitle]          = useState("");
+  const [priority,       setPriority]       = useState("Medium");
+  const [dueDate,        setDueDate]        = useState("");
+  const [filter,         setFilter]         = useState("All");
+  const [priorityFilter, setPriorityFilter] = useState("All");
+  const [toast,          setToast]          = useState({msg:"",type:"ok"});
+  const [loading,        setLoading]        = useState(true);
+  const [adding,         setAdding]         = useState(false);
 
-  const showT = (msg,type="ok") => { setToast({msg,type}); setTimeout(()=>setToast({msg:"",type:"ok"}),2800); };
-
-  const refreshZones = useCallback(async()=>{
-    try {
-      const r=await axios.get(`${API}/parking-zones`);
-      setZones(r.data.map(z=>({id:z.id,name:z.name,description:z.description,icon:z.icon||"🅿",total:z.total,occupied:z.occupied})));
-    } catch { setZones([]); }
-    finally { setLoadingZones(false); }
+  useEffect(() => {
+    axios.get(`${API}/tasks`,{headers:getH()})
+      .then(r=>setTasks(r.data.map(mapTask)))
+      .catch(()=>setTasks(JSON.parse(localStorage.getItem(`tasks_v2_${localStorage.getItem("userName")||"guest"}`)||"[]")))
+      .finally(()=>setLoading(false));
   },[]);
 
-  const refreshSession = useCallback(async()=>{
+  const showT = (msg,type="ok") => { setToast({msg,type}); setTimeout(()=>setToast({msg:"",type:"ok"}),2400); };
+
+  const addTask = async () => {
+    if (!title.trim()) return;
+    setAdding(true);
     try {
-      const r=await axios.get(`${API}/parking-zones/my-session`,{headers:getH()});
-      setMySession(r.data.active?{zoneId:r.data.zoneId,checkedInAt:r.data.checkedInAt,endTime:r.data.endTime||null,courseName:r.data.courseName||null}:null);
-    } catch { setMySession(null); }
-  },[]);
-
-  const refreshSchedule = useCallback(async()=>{
-    try {
-      const r=await axios.get(`${API}/schedule`,{headers:getH()});
-      setSchedule(r.data.map(e=>({id:e.id,courseName:e.courseName,day:e.dayOfWeek,time:`${e.startTime} - ${e.endTime}`,room:e.room||e.classroom?.name||"",color:e.color})));
-    } catch { setSchedule([]); }
-  },[]);
-
-  useEffect(()=>{
-    Promise.all([refreshZones(),refreshSession(),refreshSchedule()]);
-    const iv=setInterval(()=>{ refreshZones(); refreshSession(); },15000);
-    return ()=>clearInterval(iv);
-  },[refreshZones,refreshSession,refreshSchedule]);
-
-  useEffect(()=>{
-    if(!mySession?.endTime) return;
-    const iv=setInterval(()=>{ if(pt(mySession.endTime)&&gm()>=pt(mySession.endTime)&&!autoReleasePrompt) setAutoReleasePrompt(true); },30000);
-    if(pt(mySession?.endTime)&&gm()>=pt(mySession.endTime)) setAutoReleasePrompt(true);
-    return ()=>clearInterval(iv);
-  },[mySession,autoReleasePrompt]);
-
-  const checkIn = async(zoneId,endTime,courseName)=>{
-    const zone=zones.find(z=>z.id===zoneId);
-    if(!zone) return;
-    if(zone.occupied>=zone.total){ showT("This zone is full!","err"); return; }
-    try {
-      const r=await axios.post(`${API}/parking-zones/checkin/${zoneId}`,{},{headers:getH()});
-      if(!r.data.success){ showT(r.data.message||"Check-in failed","err"); return; }
-      setMySession({zoneId,endTime:endTime||null,courseName:courseName||null,checkedInAt:r.data.checkedInAt});
-      await refreshZones();
-      showT(`✓ Checked in at ${zone.name}`);
-    } catch { showT("Failed to check in","err"); }
+      const r = await axios.post(`${API}/tasks`,{title:title.trim(),description:"",type:priority,dueDate:dueDate||null},{headers:getH()});
+      setTasks(p=>[mapTask(r.data),...p]);
+      showT("✓ Task added!");
+    } catch {
+      const t={id:Date.now(),title:title.trim(),priority,dueDate,completed:false,createdAt:new Date().toISOString()};
+      setTasks(p=>[t,...p]);
+      showT("✓ Saved locally");
+    }
+    setTitle(""); setPriority("Medium"); setDueDate(""); setAdding(false);
   };
 
-  const checkOut = async()=>{
-    try { await axios.delete(`${API}/parking-zones/checkout`,{headers:getH()}); } catch {}
-    setMySession(null); await refreshZones();
-    setConfirmLeave(false); setAutoReleasePrompt(false);
-    showT("✓ Checked out");
+  const toggle = async (task) => {
+    if (!task.completed) { try { await axios.patch(`${API}/tasks/${task.id}/complete`,{},{headers:getH()}); } catch {} }
+    setTasks(p=>p.map(t=>t.id===task.id?{...t,completed:!t.completed}:t));
   };
 
-  const todayName  = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()];
-  const todayCls   = schedule.filter(s=>s.day===todayName);
-  const nextClass  = useMemo(()=>{
-    const now=gm();
-    return todayCls.map(c=>{
-      const p=c.time?.split("-").map(t=>t.trim());
-      const es=p?.[1]; const em=pt(es?.includes(":")?es:null);
-      return {...c,em,es};
-    }).filter(c=>c.em&&c.em>now).sort((a,b)=>a.em-b.em)[0]||null;
-  },[todayCls]);
+  const del = async (id) => {
+    try { await axios.delete(`${API}/tasks/${id}`,{headers:getH()}); } catch {}
+    setTasks(p=>p.filter(t=>t.id!==id));
+    showT("Removed");
+  };
 
-  const myZone    = zones.find(z=>z.id===mySession?.zoneId);
-  const totalAvail = zones.reduce((s,z)=>s+(z.total-z.occupied),0);
+  const clearDone = async () => {
+    const done=tasks.filter(t=>t.completed);
+    await Promise.allSettled(done.map(t=>axios.delete(`${API}/tasks/${t.id}`,{headers:getH()})));
+    setTasks(p=>p.filter(t=>!t.completed));
+    showT("Cleared completed tasks");
+  };
+
+  const filtered = useMemo(()=>tasks.filter(t=>{
+    const ms = filter==="All"||(filter==="Active"&&!t.completed)||(filter==="Done"&&t.completed);
+    const mp = priorityFilter==="All"||t.priority===priorityFilter;
+    return ms&&mp;
+  }),[tasks,filter,priorityFilter]);
+
+  const counts = useMemo(()=>({ all:tasks.length, active:tasks.filter(t=>!t.completed).length, done:tasks.filter(t=>t.completed).length }),[tasks]);
+  const isOD = d => d && new Date(d)<new Date(new Date().toDateString());
+  const fmtD = d => d?new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):null;
 
   return (
     <div style={pg}>
@@ -100,195 +81,170 @@ export default function ParkingPage() {
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box}
 
-        .pk-zone{transition:box-shadow 0.2s,transform 0.18s;cursor:default}
-        .pk-zone:hover{box-shadow:0 12px 32px rgba(15,23,42,0.11);transform:translateY(-2px)}
+        .tk-inp:focus{outline:none;border-color:#0ea5e9;box-shadow:0 0 0 3px rgba(14,165,233,0.12);background:white}
+        .tk-inp.err{border-color:#ef4444}
+        .tk-btn{transition:filter 0.15s,transform 0.1s;cursor:pointer}
+        .tk-btn:hover:not(:disabled){filter:brightness(1.06)}
+        .tk-btn:active:not(:disabled){transform:scale(0.97)}
+        .tk-btn:disabled{opacity:0.55;cursor:not-allowed}
 
-        .pk-chkin{transition:filter 0.15s,transform 0.1s;cursor:pointer}
-        .pk-chkin:hover:not(:disabled){filter:brightness(1.07)}
-        .pk-chkin:active:not(:disabled){transform:scale(0.97)}
-        .pk-chkin:disabled{opacity:0.5;cursor:not-allowed}
+        .tk-card{transition:box-shadow 0.18s,transform 0.15s}
+        .tk-card:hover{box-shadow:0 6px 20px rgba(15,23,42,0.09);transform:translateY(-1px)}
+        .tk-card.done{opacity:0.55}
 
-        .pk-btn{transition:filter 0.15s,transform 0.1s;cursor:pointer}
-        .pk-btn:hover:not(:disabled){filter:brightness(1.06)}
-        .pk-btn:active:not(:disabled){transform:scale(0.97)}
+        .tk-chk{width:22px;height:22px;border-radius:7px;border:2px solid #cbd5e1;background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;transition:all 0.15s}
+        .tk-chk:hover{border-color:#0ea5e9}
+        .tk-chk.ck{background:#0ea5e9;border-color:#0ea5e9;color:white}
 
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
-        .pk-live{animation:pulse 2s ease-in-out infinite}
+        .tk-del{background:none;border:none;cursor:pointer;color:#cbd5e1;font-size:16px;padding:3px 6px;border-radius:6px;transition:all 0.15s;flex-shrink:0;line-height:1}
+        .tk-del:hover{color:#ef4444;background:#fef2f2}
 
-        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-        .pk-zone{animation:fadeUp 0.3s ease both}
-
-        @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
-        .pk-toast{animation:toastIn 0.25s ease}
+        .tk-chip{padding:5px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:'Sora',sans-serif;border:1.5px solid #e2e8f0;background:white}
+        .tk-chip:hover{border-color:#0ea5e9;color:#0ea5e9}
+        .tk-chip.on{background:#0ea5e9;color:white;border-color:#0ea5e9;box-shadow:0 3px 10px rgba(14,165,233,0.25)}
 
         @keyframes spin{to{transform:rotate(360deg)}}
-        .pk-spin{width:20px;height:20px;border:2.5px solid #e2e8f0;border-top-color:#10b981;border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block}
+        .tk-spin{width:18px;height:18px;border:2.5px solid #e2e8f0;border-top-color:#0ea5e9;border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block}
 
-        @media(max-width:700px){.pk-grid{grid-template-columns:1fr!important}}
+        @keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+        .tk-entry{animation:slideIn 0.2s ease both}
+
+        @keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+        .tk-toast{animation:toastIn 0.25s ease}
+
+        @media(max-width:600px){.tk-form-grid{grid-template-columns:1fr!important}.tk-filters{flex-direction:column!important}}
       `}</style>
 
       {/* Toast */}
-      {toast.msg&&(
-        <div className="pk-toast" style={{position:"fixed",top:"20px",right:"20px",zIndex:9999,padding:"12px 18px",borderRadius:"12px",fontFamily:"'Sora',sans-serif",fontSize:"13px",fontWeight:"600",background:toast.type==="err"?"#fef2f2":"#f0fdf4",color:toast.type==="err"?"#dc2626":"#166534",border:`1px solid ${toast.type==="err"?"#fecaca":"#bbf7d0"}`,boxShadow:"0 8px 24px rgba(0,0,0,0.10)"}}>
-          {toast.msg}
-        </div>
+      {toast.msg && (
+        <div className="tk-toast" style={{
+          position:"fixed",top:"20px",right:"20px",zIndex:9999,
+          padding:"12px 18px",borderRadius:"12px",fontFamily:"'Sora',sans-serif",fontSize:"13px",fontWeight:"600",
+          background:toast.type==="err"?"#fef2f2":"#f0f9ff",
+          color:toast.type==="err"?"#dc2626":"#0369a1",
+          border:`1px solid ${toast.type==="err"?"#fecaca":"#bae6fd"}`,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.10)",
+        }}>{toast.msg}</div>
       )}
 
-      {/* Auto-release banner */}
-      {autoReleasePrompt&&mySession&&(
-        <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:"14px",padding:"14px 18px",marginBottom:"18px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"14px",flexWrap:"wrap",fontFamily:"'Sora',sans-serif"}}>
-          <span style={{fontSize:"14px",color:"#9a3412",fontWeight:"600"}}>⏰ Your class ended. Did you leave <strong>{myZone?.name}</strong>?</span>
-          <div style={{display:"flex",gap:"8px"}}>
-            <button className="pk-btn" onClick={checkOut} style={{padding:"9px 16px",borderRadius:"10px",border:"none",background:"#16a34a",color:"white",fontWeight:"700",fontSize:"13px",fontFamily:"'Sora',sans-serif"}}>Yes, I left</button>
-            <button className="pk-btn" onClick={()=>setAutoReleasePrompt(false)} style={{padding:"9px 16px",borderRadius:"10px",border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:"600",fontSize:"13px",fontFamily:"'Sora',sans-serif"}}>Still here</button>
-          </div>
-        </div>
-      )}
-
-      <div style={{maxWidth:"1000px",margin:"0 auto"}}>
+      <div style={{maxWidth:"820px",margin:"0 auto"}}>
 
         {/* Header */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:"16px",marginBottom:"22px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:"16px",marginBottom:"24px"}}>
           <div>
-            <h1 style={{fontSize:"30px",fontWeight:"800",color:"#0f172a",letterSpacing:"-0.5px",marginBottom:"4px",fontFamily:"'Sora',sans-serif"}}>Parking</h1>
-            <p style={{color:"#64748b",fontSize:"14px",fontFamily:"'Sora',sans-serif"}}>Real-time availability · Building A11</p>
+            <h1 style={{fontSize:"30px",fontWeight:"800",color:"#0f172a",letterSpacing:"-0.5px",marginBottom:"4px",fontFamily:"'Sora',sans-serif"}}>Tasks</h1>
+            <p style={{color:"#64748b",fontSize:"14px",fontFamily:"'Sora',sans-serif"}}>Track assignments, deadlines, and exam prep.</p>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:"12px",flexWrap:"wrap"}}>
-            {/* Live indicator */}
-            <div style={{display:"flex",alignItems:"center",gap:"7px",padding:"8px 14px",borderRadius:"999px",background:"white",border:"1.5px solid #e2e8f0",fontFamily:"'Sora',sans-serif",fontSize:"12px",fontWeight:"600",color:"#475569"}}>
-              <span className="pk-live" style={{width:8,height:8,borderRadius:"50%",background:"#10b981",display:"inline-block"}}/>
-              Live · updates every 15s
-            </div>
-            {/* Total badge */}
-            <div style={{background:"#f0fdf4",border:"1.5px solid #10b98122",borderRadius:"14px",padding:"12px 18px",textAlign:"center",minWidth:"110px"}}>
-              <div style={{fontSize:"26px",fontWeight:"800",color:"#059669",fontFamily:"'JetBrains Mono',monospace"}}>{totalAvail}</div>
-              <div style={{fontSize:"11px",color:"#64748b",fontWeight:"600",fontFamily:"'Sora',sans-serif",textTransform:"uppercase",letterSpacing:"0.05em"}}>Available</div>
-            </div>
+          {/* Stats pills */}
+          <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
+            {[{v:counts.active,c:"#0ea5e9",bg:"#f0f9ff",l:"active"},{v:counts.done,c:"#22c55e",bg:"#f0fdf4",l:"done"}].map(s=>(
+              <div key={s.l} style={{background:s.bg,borderRadius:"12px",padding:"10px 16px",display:"flex",alignItems:"baseline",gap:"6px",border:`1.5px solid ${s.c}22`}}>
+                <span style={{fontSize:"22px",fontWeight:"800",color:s.c,fontFamily:"'JetBrains Mono',monospace"}}>{s.v}</span>
+                <span style={{fontSize:"12px",color:"#64748b",fontWeight:"600",fontFamily:"'Sora',sans-serif"}}>{s.l}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* My Session */}
-        {mySession&&myZone&&(
-          <div style={{background:"white",borderRadius:"18px",padding:"18px 20px",marginBottom:"18px",border:"2px solid #0ea5e9",boxShadow:"0 4px 18px rgba(14,165,233,0.12)",display:"flex",alignItems:"center",gap:"16px",flexWrap:"wrap",fontFamily:"'Sora',sans-serif"}}>
-            <div style={{fontSize:"36px"}}>{myZone.icon}</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:"700",fontSize:"16px",color:"#0f172a",marginBottom:"4px"}}>
-                Parked at <span style={{color:"#0ea5e9"}}>{myZone.name}</span>
-              </div>
-              {mySession.courseName&&(
-                <div style={{fontSize:"13px",color:"#64748b"}}>
-                  {mySession.courseName}{mySession.endTime&&` · until ${fmt(mySession.endTime)}`}
-                </div>
-              )}
-              {mySession.checkedInAt&&(
-                <div style={{fontSize:"12px",color:"#94a3b8",marginTop:"2px",fontFamily:"'JetBrains Mono',monospace"}}>
-                  Since {new Date(mySession.checkedInAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}
-                </div>
-              )}
-            </div>
-            {!confirmLeave ? (
-              <button className="pk-btn" onClick={()=>setConfirmLeave(true)} style={{padding:"10px 18px",borderRadius:"11px",border:"none",background:"#ef4444",color:"white",fontWeight:"700",fontSize:"13px",fontFamily:"'Sora',sans-serif",flexShrink:0}}>
-                Check Out
+        {/* Add Form */}
+        <div style={{background:"white",borderRadius:"18px",padding:"18px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 10px rgba(15,23,42,0.05)",marginBottom:"18px"}}>
+          <div className="tk-form-grid" style={{display:"grid",gridTemplateColumns:"1fr auto auto",gap:"10px",marginBottom:"12px"}}>
+            <input className="tk-inp" style={inp} placeholder="Add a task… press Enter" value={title}
+              onChange={e=>setTitle(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} />
+            <select className="tk-inp" style={{...inp,paddingRight:"8px"}} value={priority} onChange={e=>setPriority(e.target.value)}>
+              {PRIORITIES.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+            <input className="tk-inp" type="date" style={inp} value={dueDate} onChange={e=>setDueDate(e.target.value)} />
+          </div>
+          <button className="tk-btn" onClick={addTask} disabled={!title.trim()||adding}
+            style={{padding:"11px 22px",borderRadius:"11px",border:"none",background:"#0ea5e9",color:"white",fontWeight:"700",fontSize:"14px",fontFamily:"'Sora',sans-serif",boxShadow:"0 4px 12px rgba(14,165,233,0.28)",opacity:!title.trim()?0.5:1,cursor:!title.trim()?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:"8px"}}>
+            {adding?<><span className="tk-spin"/>Adding…</>:"+ Add Task"}
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="tk-filters" style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:"10px",marginBottom:"18px"}}>
+          <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+            {["All","Active","Done"].map(f=>(
+              <button key={f} className={`tk-chip${filter===f?" on":""}`} onClick={()=>setFilter(f)}>
+                {f} {f==="All"?`(${counts.all})`:f==="Active"?`(${counts.active})`:`(${counts.done})`}
               </button>
-            ) : (
-              <div style={{display:"flex",gap:"8px",flexShrink:0}}>
-                <button className="pk-btn" onClick={checkOut} style={{padding:"10px 16px",borderRadius:"11px",border:"none",background:"#ef4444",color:"white",fontWeight:"700",fontSize:"13px",fontFamily:"'Sora',sans-serif"}}>Confirm</button>
-                <button className="pk-btn" onClick={()=>setConfirmLeave(false)} style={{padding:"10px 16px",borderRadius:"11px",border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:"600",fontSize:"13px",fontFamily:"'Sora',sans-serif"}}>Cancel</button>
-              </div>
-            )}
+            ))}
           </div>
-        )}
-
-        {/* Class suggestion */}
-        {!mySession&&nextClass&&(
-          <div style={{background:"#eff6ff",borderRadius:"14px",padding:"12px 16px",marginBottom:"16px",border:"1.5px solid #bfdbfe",fontFamily:"'Sora',sans-serif",fontSize:"13px",color:"#1e40af"}}>
-            💡 Your next class <strong>{nextClass.courseName}</strong> ends at <strong>{fmt(nextClass.es)}</strong> — this will be used as your parking end time.
+          <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+            {["All",...PRIORITIES].map(p=>{
+              const cfg=P_CONFIG[p]; const on=priorityFilter===p;
+              return (
+                <button key={p} className="tk-chip" onClick={()=>setPriorityFilter(p)}
+                  style={{background:on&&cfg?cfg.bg:"white",color:on&&cfg?cfg.color:"#64748b",borderColor:on&&cfg?cfg.color:"#e2e8f0"}}>
+                  {cfg&&<span style={{width:8,height:8,borderRadius:"50%",background:cfg.dot,display:"inline-block",marginRight:4}}/>}
+                  {p}
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
 
-        {/* Zones Grid */}
-        {loadingZones ? (
+        {/* List */}
+        {loading ? (
           <div style={{textAlign:"center",padding:"60px 20px"}}>
-            <span className="pk-spin"/>
-            <p style={{marginTop:"14px",color:"#94a3b8",fontFamily:"'Sora',sans-serif",fontSize:"14px"}}>Loading zones…</p>
+            <span className="tk-spin"/><br/>
+            <span style={{marginTop:"14px",display:"block",color:"#94a3b8",fontFamily:"'Sora',sans-serif",fontSize:"14px"}}>Loading tasks…</span>
+          </div>
+        ) : filtered.length===0 ? (
+          <div style={{textAlign:"center",padding:"60px 20px",background:"white",borderRadius:"18px",border:"1.5px solid #e2e8f0"}}>
+            <div style={{fontSize:"48px",marginBottom:"12px"}}>{tasks.length===0?"📋":"✅"}</div>
+            <p style={{fontWeight:"700",fontSize:"18px",color:"#0f172a",marginBottom:"6px",fontFamily:"'Sora',sans-serif"}}>
+              {tasks.length===0?"No tasks yet":"Nothing here"}
+            </p>
+            <p style={{color:"#94a3b8",fontSize:"14px",fontFamily:"'Sora',sans-serif"}}>
+              {tasks.length===0?"Add your first task above.":"Try switching filters."}
+            </p>
           </div>
         ) : (
-          <div className="pk-grid" style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"16px"}}>
-            {zones.map((zone,i)=>{
-              const avail  = zone.total-zone.occupied;
-              const pct    = zone.total?Math.round(zone.occupied/zone.total*100):0;
-              const status = getStatus(pct);
-              const dis    = !!mySession||avail<=0;
+          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+            {filtered.map((task,i)=>{
+              const cfg=P_CONFIG[task.priority]||P_CONFIG["Medium"];
+              const ov=!task.completed&&isOD(task.dueDate);
               return (
-                <div key={zone.id} className="pk-zone" style={{
-                  background:"white", borderRadius:"18px", padding:"18px",
-                  border:"1.5px solid #f1f5f9",
-                  boxShadow:"0 2px 8px rgba(15,23,42,0.05)",
-                  position:"relative", overflow:"hidden",
-                  animationDelay:`${i*0.07}s`,
+                <div key={task.id} className={`tk-card tk-entry${task.completed?" done":""}`} style={{
+                  background:"white",borderRadius:"14px",padding:"14px 16px",
+                  border:"1.5px solid #f1f5f9",borderLeft:`4px solid ${task.completed?"#e2e8f0":cfg.color}`,
+                  boxShadow:"0 2px 6px rgba(15,23,42,0.04)",
+                  display:"flex",alignItems:"flex-start",gap:"12px",
+                  animationDelay:`${i*0.03}s`,
                 }}>
-                  {/* Top accent */}
-                  <div style={{position:"absolute",top:0,left:0,right:0,height:"3px",background:status.bar,borderRadius:"18px 18px 0 0"}}/>
-
-                  {/* Zone header */}
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"14px",marginTop:"4px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                      <span style={{fontSize:"26px"}}>{zone.icon}</span>
-                      <div>
-                        <h3 style={{fontFamily:"'Sora',sans-serif",fontWeight:"800",fontSize:"16px",color:"#0f172a",marginBottom:"3px"}}>{zone.name}</h3>
-                        <p style={{fontSize:"12px",color:"#94a3b8",fontFamily:"'Sora',sans-serif"}}>{zone.description}</p>
-                      </div>
-                    </div>
-                    <span style={{padding:"4px 10px",borderRadius:"999px",fontSize:"11px",fontWeight:"700",background:status.bg,color:status.text,flexShrink:0,fontFamily:"'Sora',sans-serif"}}>
-                      {status.icon} {status.label}
-                    </span>
-                  </div>
-
-                  {/* Number */}
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"10px"}}>
-                    <div>
-                      <span style={{fontSize:"42px",fontWeight:"800",color:"#0f172a",fontFamily:"'JetBrains Mono',monospace",lineHeight:1}}>{avail}</span>
-                      <span style={{fontSize:"14px",color:"#94a3b8",marginLeft:"6px"}}>/ {zone.total}</span>
-                      <p style={{fontSize:"12px",color:"#94a3b8",marginTop:"3px",fontFamily:"'Sora',sans-serif"}}>available spots</p>
-                    </div>
-                    <div style={{textAlign:"center",background:pct>=90?"#fef2f2":pct>=60?"#fffbeb":"#f0fdf4",borderRadius:"10px",padding:"8px 12px",minWidth:"54px"}}>
-                      <div style={{fontSize:"16px",fontWeight:"800",color:status.text,fontFamily:"'JetBrains Mono',monospace"}}>{pct}%</div>
-                      <div style={{fontSize:"10px",color:"#94a3b8",fontFamily:"'Sora',sans-serif"}}>full</div>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div style={{background:"#f1f5f9",borderRadius:"999px",height:"8px",marginBottom:"14px",overflow:"hidden"}}>
-                    <div style={{height:"100%",borderRadius:"999px",width:`${pct}%`,background:status.bar,transition:"width 0.5s ease"}}/>
-                  </div>
-
-                  {/* Check in button */}
-                  <button className="pk-chkin" disabled={dis} style={{
-                    width:"100%",padding:"12px",borderRadius:"12px",border:"none",
-                    fontFamily:"'Sora',sans-serif",fontWeight:"800",fontSize:"14px",
-                    background:dis?"#f1f5f9":"linear-gradient(135deg,#10b981,#059669)",
-                    color:dis?"#94a3b8":"white",
-                    boxShadow:dis?"none":"0 4px 14px rgba(16,185,129,0.30)",
-                    cursor:dis?"not-allowed":"pointer",
-                    opacity:dis?0.7:1,
-                  }} onClick={()=>!dis&&checkIn(zone.id,nextClass?.es||null,nextClass?.courseName||null)}>
-                    {mySession?"Already Parked":avail<=0?"Zone Full":"I Parked Here"}
+                  <button className={`tk-chk${task.completed?" ck":""}`} onClick={()=>toggle(task)}>
+                    {task.completed&&"✓"}
                   </button>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:"600",fontSize:"15px",fontFamily:"'Sora',sans-serif",color:task.completed?"#94a3b8":"#0f172a",textDecoration:task.completed?"line-through":"none",marginBottom:"6px",wordBreak:"break-word"}}>
+                      {task.title}
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center"}}>
+                      <span style={{padding:"3px 10px",borderRadius:"999px",fontSize:"11px",fontWeight:"700",background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,display:"flex",alignItems:"center",gap:"4px"}}>
+                        <span style={{width:6,height:6,borderRadius:"50%",background:cfg.dot,display:"inline-block"}}/>
+                        {task.priority}
+                      </span>
+                      {task.dueDate&&(
+                        <span style={{fontSize:"12px",fontWeight:"600",color:ov?"#dc2626":"#94a3b8",fontFamily:"'JetBrains Mono',monospace",display:"flex",alignItems:"center",gap:"4px"}}>
+                          {ov?"⚠":"📅"} {fmtD(task.dueDate)}{ov&&" · Overdue"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button className="tk-del" onClick={()=>del(task.id)}>✕</button>
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Legend */}
-        {!loadingZones&&zones.length>0&&(
-          <div style={{marginTop:"20px",display:"flex",gap:"18px",flexWrap:"wrap",justifyContent:"center"}}>
-            {[{icon:"🟢",label:"Available"},{"icon":"🟡",label:"Filling Up"},{"icon":"🔴",label:"Almost Full"}].map(l=>(
-              <span key={l.label} style={{fontSize:"12px",color:"#94a3b8",fontWeight:"600",fontFamily:"'Sora',sans-serif",display:"flex",alignItems:"center",gap:"6px"}}>
-                {l.icon} {l.label}
-              </span>
-            ))}
-            <span style={{fontSize:"12px",color:"#94a3b8",fontFamily:"'Sora',sans-serif"}}>· Numbers reflect student check-ins</span>
+        {counts.done>0&&!loading&&(
+          <div style={{marginTop:"18px",textAlign:"right"}}>
+            <button className="tk-btn" onClick={clearDone} style={{background:"none",border:"1.5px solid #fecaca",color:"#dc2626",padding:"9px 16px",borderRadius:"10px",fontSize:"13px",fontWeight:"600",cursor:"pointer",fontFamily:"'Sora',sans-serif"}}>
+              🗑 Clear {counts.done} completed
+            </button>
           </div>
         )}
       </div>
@@ -296,4 +252,5 @@ export default function ParkingPage() {
   );
 }
 
-const pg = { minHeight:"100vh", background:"#f8fafc", padding:"24px 20px 48px", fontFamily:"'Sora',system-ui,sans-serif" };
+const pg  = { minHeight:"100vh", background:"#f8fafc", padding:"24px 20px 48px", fontFamily:"'Sora',system-ui,sans-serif" };
+const inp = { width:"100%", padding:"11px 14px", borderRadius:"10px", border:"1.5px solid #e2e8f0", fontSize:"14px", color:"#0f172a", background:"#f8fafc", fontFamily:"'Sora',sans-serif", transition:"all 0.15s", boxSizing:"border-box" };
