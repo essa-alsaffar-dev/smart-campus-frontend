@@ -3,9 +3,26 @@ import axios from "axios";
 
 const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
 
+const getToken = () => {
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("authToken") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("jwt") ||
+    ""
+  );
+};
+
 const getH = () => {
-  const t = localStorage.getItem("token");
-  return t ? { Authorization: `Bearer ${t}` } : {};
+  const t = getToken();
+  return t
+    ? {
+        Authorization: `Bearer ${t}`,
+        "Content-Type": "application/json",
+      }
+    : {
+        "Content-Type": "application/json",
+      };
 };
 
 const getUserKey = () => {
@@ -142,14 +159,26 @@ export default function SchedulePage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await axios.get(`${API}/schedule`, { headers: getH() });
+        const token = getToken();
+        console.log("Schedule load token exists:", !!token);
+
+        const res = await axios.get(`${API}/schedule`, {
+          headers: getH(),
+        });
+
         const entries = Array.isArray(res.data) ? res.data.map(mapEntry) : [];
         saveSchedule(entries);
         setCourseColorMap(buildColorMap(entries));
-      } catch {
+      } catch (err) {
+        console.log("GET /schedule failed:", err?.response?.status, err?.response?.data);
+
         const saved = JSON.parse(localStorage.getItem(getScheduleStorageKey()) || "[]");
         setSchedule(saved);
         setCourseColorMap(buildColorMap(saved));
+
+        if (err?.response?.status === 401 || err?.response?.status === 403) {
+          showToast("⚠️ Session expired or unauthorized. Please login again.");
+        }
       }
 
       setRooms(JSON.parse(localStorage.getItem("classrooms") || "[]"));
@@ -214,6 +243,12 @@ export default function SchedulePage() {
       return;
     }
 
+    const token = getToken();
+    if (!token) {
+      showToast("⚠️ No token found. Please login again.");
+      return;
+    }
+
     const color = assignColor(courseName.trim());
     const { roomName, classroomId } = resolveRoomPayload();
 
@@ -231,44 +266,52 @@ export default function SchedulePage() {
     }
 
     try {
-      const res = await axios.post(`${API}/schedule`, payload, { headers: getH() });
+      console.log("POST /schedule payload:", payload);
+      console.log("POST /schedule token exists:", !!token);
+
+      const res = await axios.post(`${API}/schedule`, payload, {
+        headers: getH(),
+      });
 
       const newEntry = mapEntry(res.data);
       const updated = [...schedule, newEntry];
       saveSchedule(updated);
       showToast("✅ Class added!");
+
+      setCourseName("");
+      setStartTime("");
+      setEndTime("");
+      setRoom("");
+      setShowForm(false);
     } catch (err) {
       console.log("POST /schedule failed:", err?.response?.status, err?.response?.data);
 
-      const entry = {
-        id: Date.now(),
-        courseName: courseName.trim(),
-        day,
-        time: `${startTime} - ${endTime}`,
-        room: roomName,
-        color,
-      };
-
-      const updated = [...schedule, entry];
-      saveSchedule(updated);
-      showToast("✅ Class added (offline)");
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        showToast("⚠️ Unauthorized. Please login again.");
+      } else {
+        showToast("❌ Failed to save class to server");
+      }
     }
-
-    setCourseName("");
-    setStartTime("");
-    setEndTime("");
-    setRoom("");
-    setShowForm(false);
   };
 
   const deleteSchedule = async (id) => {
     try {
-      await axios.delete(`${API}/schedule/${id}`, { headers: getH() });
-    } catch {}
+      await axios.delete(`${API}/schedule/${id}`, {
+        headers: getH(),
+      });
 
-    const updated = schedule.filter((s) => s.id !== id);
-    saveSchedule(updated);
-    showToast("🗑 Class removed");
+      const updated = schedule.filter((s) => s.id !== id);
+      saveSchedule(updated);
+      showToast("🗑 Class removed");
+    } catch (err) {
+      console.log("DELETE /schedule failed:", err?.response?.status, err?.response?.data);
+
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        showToast("⚠️ Unauthorized. Please login again.");
+      } else {
+        showToast("❌ Failed to delete class from server");
+      }
+    }
   };
 
   const getDayEntries = (dayName) =>
