@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 
 const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
@@ -24,9 +24,7 @@ const mapEntry = (e) => ({
   id: e.id,
   courseName: e.courseName,
   day: e.dayOfWeek || e.day,
-  time:
-    e.time ||
-    `${e.startTime || ""} - ${e.endTime || ""}`,
+  time: e.time || `${e.startTime || ""} - ${e.endTime || ""}`,
   room: e.room || e.classroom?.name || "",
   color: e.color,
 });
@@ -98,7 +96,6 @@ const getCurrentMinutes = () => {
   return now.getHours() * 60 + now.getMinutes();
 };
 
-// كل ساعة من 8 صباحًا إلى 10 مساءً
 const generateTimeOptions = () => {
   const options = [];
   for (let minutes = 8 * 60; minutes <= 22 * 60; minutes += 60) {
@@ -137,6 +134,11 @@ export default function SchedulePage() {
     return colorMap;
   };
 
+  const saveSchedule = (updated) => {
+    setSchedule(updated);
+    localStorage.setItem(getScheduleStorageKey(), JSON.stringify(updated));
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -156,11 +158,6 @@ export default function SchedulePage() {
     load();
   }, []);
 
-  const saveSchedule = (updated) => {
-    setSchedule(updated);
-    localStorage.setItem(getScheduleStorageKey(), JSON.stringify(updated));
-  };
-
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
@@ -174,8 +171,40 @@ export default function SchedulePage() {
     return color;
   };
 
+  const resolveRoomPayload = () => {
+    if (room && typeof room === "object") {
+      return {
+        roomName: String(room.name || room.roomName || room.label || "").trim(),
+        classroomId: room.id ?? room.classroomId ?? null,
+      };
+    }
+
+    const typed = String(room || "").trim();
+    if (!typed) {
+      return { roomName: "", classroomId: null };
+    }
+
+    const matched =
+      rooms.find((r) => {
+        const name = String(r?.name || r?.roomName || r || "").trim().toLowerCase();
+        return name === typed.toLowerCase();
+      }) || null;
+
+    if (matched) {
+      return {
+        roomName: String(matched.name || matched.roomName || typed).trim(),
+        classroomId: matched.id ?? matched.classroomId ?? null,
+      };
+    }
+
+    return {
+      roomName: typed,
+      classroomId: null,
+    };
+  };
+
   const addSchedule = async () => {
-    if (!courseName.trim() || !day || !startTime || !endTime || !room) {
+    if (!courseName.trim() || !day || !startTime || !endTime || !String(room || "").trim()) {
       showToast("⚠️ Please fill in all fields");
       return;
     }
@@ -186,32 +215,37 @@ export default function SchedulePage() {
     }
 
     const color = assignColor(courseName.trim());
+    const { roomName, classroomId } = resolveRoomPayload();
+
+    const payload = {
+      courseName: courseName.trim(),
+      dayOfWeek: day,
+      startTime,
+      endTime,
+      room: roomName,
+      color,
+    };
+
+    if (classroomId !== null && classroomId !== undefined) {
+      payload.classroomId = classroomId;
+    }
 
     try {
-      const res = await axios.post(
-        `${API}/schedule`,
-        {
-          courseName: courseName.trim(),
-          dayOfWeek: day,
-          startTime,
-          endTime,
-          room: room.trim(),
-          color,
-        },
-        { headers: getH() }
-      );
+      const res = await axios.post(`${API}/schedule`, payload, { headers: getH() });
 
       const newEntry = mapEntry(res.data);
       const updated = [...schedule, newEntry];
       saveSchedule(updated);
       showToast("✅ Class added!");
-    } catch {
+    } catch (err) {
+      console.log("POST /schedule failed:", err?.response?.status, err?.response?.data);
+
       const entry = {
         id: Date.now(),
         courseName: courseName.trim(),
         day,
         time: `${startTime} - ${endTime}`,
-        room: room.trim(),
+        room: roomName,
         color,
       };
 
@@ -407,7 +441,7 @@ export default function SchedulePage() {
                   style={formInput}
                   type="text"
                   placeholder="e.g. G101, Lab 3, Building A"
-                  value={room}
+                  value={typeof room === "object" ? room?.name || room?.roomName || "" : room}
                   onChange={(e) => setRoom(e.target.value)}
                   list="rooms-suggestions"
                 />
@@ -540,6 +574,7 @@ export default function SchedulePage() {
         {schedule.length > 0 && viewMode === "week" && (
           <div style={{ overflowX: "auto" }}>
             <div
+              className="sc-week-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: `repeat(${DAYS.length}, minmax(180px, 1fr))`,
