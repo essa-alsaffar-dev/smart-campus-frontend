@@ -4,264 +4,308 @@ import axios from "axios";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail]       = useState("");
+  const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
   const [showPass, setShowPass] = useState(false);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password.trim()) {
-      setError("Please fill in all fields.");
-      return;
-    }
-    setError("");
-    setLoading(true);
+    if (!email.trim() || !password.trim()) { setError("Please fill in all fields."); return; }
+    setError(""); setLoading(true);
     try {
-      const response = await axios.post("https://smart-campus-backend-production-bf5e.up.railway.app/auth/login", {
-        email,
-        password,
-      });
-      const data = response.data;
+      const { data } = await axios.post(
+        "https://smart-campus-backend-production-bf5e.up.railway.app/auth/login",
+        { email, password }
+      );
+      if (!data.token) { setError(data.message || "Incorrect email or password."); setLoading(false); return; }
       localStorage.setItem("token",    data.token);
       localStorage.setItem("userName", data.name);
       localStorage.setItem("userRole", data.role);
       localStorage.setItem("userEmail", email.toLowerCase().trim());
-      // Also register email locally to prevent duplicate registration
       const emails = JSON.parse(localStorage.getItem("registeredEmails") || "[]");
-      if (!emails.includes(email.toLowerCase().trim())) {
+      if (!emails.includes(email.toLowerCase().trim()))
         localStorage.setItem("registeredEmails", JSON.stringify([...emails, email.toLowerCase().trim()]));
-      }
       navigate("/dashboard");
-    } catch (err) {
-      console.error(err);
+    } catch {
       setError("Incorrect email or password. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleLogin();
+    } finally { setLoading(false); }
   };
 
   return (
     <div style={page}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
-        *, *::before, *::after { box-sizing: border-box; }
+        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700;800&display=swap');
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── Blobs ── */
+        .lg-blob {
+          position: absolute;
+          border-radius: 50%;
+          filter: blur(80px);
+          pointer-events: none;
+          opacity: 0.55;
+        }
 
         /* ── Left panel ── */
-        .sc-left-panel { display: flex; }
-        @media (max-width: 768px) { .sc-left-panel { display: none !important; } }
+        .lg-left { display: flex; }
+        @media (max-width: 860px) { .lg-left { display: none !important; } }
 
-        .sc-dot-grid {
-          position: absolute; inset: 0;
-          background-image: radial-gradient(circle, rgba(255,255,255,0.10) 1px, transparent 1px);
-          background-size: 26px 26px;
-          pointer-events: none;
+        /* ── Orbs floating ── */
+        @keyframes float1 { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-18px) rotate(4deg)} }
+        @keyframes float2 { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(14px) rotate(-3deg)} }
+        @keyframes float3 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+        .orb1 { animation: float1 7s ease-in-out infinite; }
+        .orb2 { animation: float2 9s ease-in-out infinite; }
+        .orb3 { animation: float3 5s ease-in-out infinite; }
+
+        /* ── Card ── */
+        @keyframes cardIn {
+          from { opacity: 0; transform: translateY(22px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
         }
+        .lg-card { animation: cardIn 0.5s cubic-bezier(0.22,1,0.36,1) both; }
 
         /* ── Inputs ── */
-        .sc-field-input:focus {
+        .lg-inp {
+          width: 100%; padding: 14px 16px;
+          border: 1.5px solid #e8eaf0; border-radius: 12px;
+          font-size: 14px; font-family: 'DM Sans', sans-serif;
+          background: #fafbfd; color: #0f172a;
+          transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
           outline: none;
-          border-color: #2563eb !important;
-          box-shadow: 0 0 0 3px rgba(37,99,235,0.14) !important;
-          background: white !important;
         }
-        .sc-field-input.error-state {
-          border-color: #ef4444 !important;
-          box-shadow: 0 0 0 3px rgba(239,68,68,0.12) !important;
+        .lg-inp:focus {
+          border-color: #6366f1;
+          box-shadow: 0 0 0 4px rgba(99,102,241,0.10);
+          background: white;
         }
-        .sc-field-input { transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+        .lg-inp.has-err {
+          border-color: #f43f5e;
+          box-shadow: 0 0 0 4px rgba(244,63,94,0.10);
+        }
+        .lg-inp::placeholder { color: #adb5c7; }
 
-        /* ── Submit button ── */
-        .sc-submit-btn { transition: filter 0.15s, transform 0.1s, box-shadow 0.15s; }
-        .sc-submit-btn:hover:not(:disabled) {
+        /* ── Button ── */
+        .lg-btn {
+          width: 100%; padding: 14px; border: none; border-radius: 12px;
+          font-size: 15px; font-weight: 700; font-family: 'DM Sans', sans-serif;
+          cursor: pointer; position: relative; overflow: hidden;
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: white;
+          box-shadow: 0 6px 20px rgba(99,102,241,0.38);
+          transition: filter 0.18s, transform 0.12s, box-shadow 0.18s;
+          letter-spacing: 0.01em;
+        }
+        .lg-btn::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%);
+          pointer-events: none;
+        }
+        .lg-btn:hover:not(:disabled) {
           filter: brightness(1.07);
-          box-shadow: 0 10px 28px rgba(37,99,235,0.40) !important;
+          transform: translateY(-1px);
+          box-shadow: 0 10px 28px rgba(99,102,241,0.45);
         }
-        .sc-submit-btn:active:not(:disabled) { transform: scale(0.98); }
-        .sc-submit-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+        .lg-btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+        .lg-btn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
 
-        /* ── Feature cards ── */
-        .sc-feat-card { transition: background 0.2s, transform 0.2s; }
-        .sc-feat-card:hover {
-          background: rgba(255,255,255,0.13) !important;
+        /* ── Eye btn ── */
+        .lg-eye {
+          position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+          background: none; border: none; cursor: pointer;
+          color: #adb5c7; font-size: 17px; line-height: 1; padding: 4px;
+          transition: color 0.15s;
+        }
+        .lg-eye:hover { color: #6366f1; }
+
+        /* ── Forgot ── */
+        .lg-forgot {
+          color: #6366f1; font-size: 13px; font-weight: 600;
+          text-decoration: none; transition: color 0.15s;
+        }
+        .lg-forgot:hover { color: #4f46e5; }
+
+        /* ── Spinner ── */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .lg-spin {
+          width: 18px; height: 18px; display: inline-block; vertical-align: middle;
+          border: 2.5px solid rgba(255,255,255,0.3); border-top-color: white;
+          border-radius: 50%; animation: spin 0.7s linear infinite;
+        }
+
+        /* ── Error shake ── */
+        @keyframes shake {
+          0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)}
+          40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)}
+        }
+        .lg-err { animation: shake 0.42s ease; }
+
+        /* ── Divider ── */
+        .lg-divider {
+          display: flex; align-items: center; gap: 12px;
+          color: #c4c9d8; font-size: 12px; font-weight: 600;
+          text-transform: uppercase; letter-spacing: 0.08em;
+          margin: 20px 0;
+        }
+        .lg-divider::before, .lg-divider::after {
+          content: ''; flex: 1; height: 1px; background: #eef0f6;
+        }
+
+        /* ── Feature items ── */
+        .lg-feat {
+          display: flex; align-items: center; gap: 14px;
+          padding: 13px 16px; border-radius: 14px;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.09);
+          transition: background 0.2s, transform 0.2s;
+          cursor: default;
+        }
+        .lg-feat:hover {
+          background: rgba(255,255,255,0.11);
           transform: translateX(5px);
         }
 
-        /* ── Eye button ── */
-        .sc-eye-btn {
-          background: none; border: none; cursor: pointer;
-          color: #94a3b8; padding: 4px; line-height: 1;
-          transition: color 0.15s; font-size: 16px;
-        }
-        .sc-eye-btn:hover { color: #475569; }
-
-        /* ── Forgot password link ── */
-        .sc-forgot { color: #2563eb; font-size: 13px; font-weight: 600; text-decoration: none; transition: color 0.15s; }
-        .sc-forgot:hover { color: #1d4ed8; }
-
         /* ── Back link ── */
-        .sc-back { transition: color 0.15s; }
-        .sc-back:hover { color: #0f172a !important; }
-
-        /* ── Animations ── */
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(14px); }
-          to   { opacity: 1; transform: translateY(0); }
+        .lg-back {
+          color: #94a3b8; font-size: 13px; font-weight: 600;
+          text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+          transition: color 0.15s;
         }
-        .sc-card { animation: fadeUp 0.38s ease; }
-
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .sc-spinner {
-          width: 18px; height: 18px;
-          border: 2.5px solid rgba(255,255,255,0.35);
-          border-top-color: white;
-          border-radius: 50%;
-          animation: spin 0.7s linear infinite;
-          display: inline-block; vertical-align: middle;
-        }
-
-        /* ── Divider ── */
-        .sc-divider {
-          display: flex; align-items: center; gap: 12px;
-          color: #94a3b8; font-size: 13px; margin: 20px 0;
-        }
-        .sc-divider::before, .sc-divider::after {
-          content: ''; flex: 1; height: 1px; background: #e2e8f0;
-        }
-
-        /* ── Shake on error ── */
-        @keyframes shake {
-          0%,100% { transform: translateX(0); }
-          20% { transform: translateX(-5px); }
-          40% { transform: translateX(5px); }
-          60% { transform: translateX(-3px); }
-          80% { transform: translateX(3px); }
-        }
-        .sc-shake { animation: shake 0.4s ease; }
+        .lg-back:hover { color: #6366f1; }
       `}</style>
 
-      {/* ── Left decorative panel ── */}
-      <div className="sc-left-panel" style={leftPanel}>
-        <div className="sc-dot-grid" />
-        <div style={leftContent}>
-          <div style={brandMark}>SC</div>
-          <h2 style={leftTitle}>Smart Campus</h2>
-          <p style={leftSub}>
-            Your all-in-one university portal for schedules, tasks, parking, and classrooms.
+      {/* ══════════ LEFT PANEL ══════════ */}
+      <div className="lg-left" style={{
+        width: "46%", minWidth: "400px", position: "relative",
+        background: "linear-gradient(145deg, #0d0f1a 0%, #131629 40%, #0f1628 100%)",
+        overflow: "hidden", flexDirection: "column",
+        justifyContent: "center", alignItems: "flex-start",
+        padding: "56px 48px",
+      }}>
+
+        {/* Background blobs */}
+        <div className="lg-blob" style={{ width:500, height:500, top:"-120px", left:"-100px", background:"#6366f1" }} />
+        <div className="lg-blob" style={{ width:350, height:350, bottom:"-80px", right:"-60px", background:"#8b5cf6", opacity:0.35 }} />
+        <div className="lg-blob" style={{ width:200, height:200, top:"55%", left:"60%", background:"#06b6d4", opacity:0.25 }} />
+
+        {/* Floating orbs */}
+        <div className="orb1" style={{ position:"absolute", top:"12%", right:"18%", width:80, height:80, borderRadius:"50%", border:"1.5px solid rgba(99,102,241,0.35)", backdropFilter:"blur(2px)" }} />
+        <div className="orb2" style={{ position:"absolute", bottom:"22%", left:"8%", width:50, height:50, borderRadius:"50%", border:"1.5px solid rgba(139,92,246,0.3)" }} />
+        <div className="orb3" style={{ position:"absolute", top:"40%", right:"8%", width:28, height:28, borderRadius:"50%", background:"rgba(6,182,212,0.25)" }} />
+
+        {/* Grid dots */}
+        <div style={{ position:"absolute", inset:0, backgroundImage:"radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px)", backgroundSize:"30px 30px", pointerEvents:"none" }} />
+
+        {/* Content */}
+        <div style={{ position:"relative", zIndex:1, width:"100%" }}>
+
+          {/* Brand */}
+          <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:52 }}>
+            <div style={{ width:46, height:46, borderRadius:13, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:18, color:"white", boxShadow:"0 8px 24px rgba(99,102,241,0.45)", fontFamily:"'DM Sans',sans-serif" }}>SC</div>
+            <span style={{ fontSize:20, fontWeight:800, color:"white", fontFamily:"'DM Sans',sans-serif", letterSpacing:"-0.3px" }}>Smart Campus</span>
+          </div>
+
+          {/* Headline */}
+          <h1 style={{ fontFamily:"'Instrument Serif', Georgia, serif", fontSize:48, fontWeight:400, color:"white", lineHeight:1.12, marginBottom:16, letterSpacing:"-0.5px" }}>
+            Your campus,<br/>
+            <span style={{ fontStyle:"italic", color:"#a5b4fc" }}>reimagined.</span>
+          </h1>
+          <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:"rgba(255,255,255,0.52)", lineHeight:1.75, marginBottom:48, maxWidth:340 }}>
+            One portal for schedules, tasks, real-time parking, and classroom finder — built for IAU students.
           </p>
 
-          <div style={featureList}>
+          {/* Features */}
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
             {[
-              { icon: "🗓", label: "Weekly schedule at a glance" },
-              { icon: "✓",  label: "Task tracking with priorities" },
-              { icon: "🅿",  label: "Real-time parking availability" },
-              { icon: "⌂",  label: "Classroom finder — Building A11" },
-            ].map((f) => (
-              <div key={f.label} className="sc-feat-card" style={featCard}>
-                <span style={featIcon}>{f.icon}</span>
-                <span style={{ fontSize: "14px", color: "rgba(255,255,255,0.82)", fontWeight: "500" }}>
-                  {f.label}
-                </span>
+              { icon:"🗓", title:"Weekly Schedule",   desc:"All your classes in one view" },
+              { icon:"✓",  title:"Task Manager",      desc:"Deadlines & exam reminders"   },
+              { icon:"🅿",  title:"Live Parking",      desc:"Real-time spot availability"  },
+              { icon:"⌂",  title:"Classroom Finder",  desc:"170+ rooms — Building A11"    },
+            ].map(f => (
+              <div key={f.title} className="lg-feat">
+                <span style={{ fontSize:20, width:30, textAlign:"center", flexShrink:0 }}>{f.icon}</span>
+                <div>
+                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontWeight:700, fontSize:13, color:"rgba(255,255,255,0.9)", marginBottom:2 }}>{f.title}</div>
+                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:"rgba(255,255,255,0.42)" }}>{f.desc}</div>
+                </div>
               </div>
             ))}
           </div>
+
         </div>
       </div>
 
-      {/* ── Right form panel ── */}
-      <div style={rightPanel}>
-        <div className="sc-card" style={card}>
+      {/* ══════════ RIGHT PANEL ══════════ */}
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:"#f5f6fa", padding:"32px 20px", minHeight:"100vh" }}>
 
-          {/* Back link */}
-          <Link to="/" className="sc-back" style={backLink}>← Back to Home</Link>
+        <div className="lg-card" style={{ width:"100%", maxWidth:420, background:"white", borderRadius:24, padding:"44px 40px", boxShadow:"0 16px 56px rgba(15,23,42,0.11), 0 1px 3px rgba(15,23,42,0.06)", border:"1.5px solid #eef0f6" }}>
 
-          {/* Logo + heading */}
-          <div style={logoWrap}>
-            <div style={logo}>SC</div>
+          {/* Back */}
+          <Link to="/" className="lg-back" style={{ display:"inline-flex", marginBottom:32 }}>
+            ← Back to Home
+          </Link>
+
+          {/* Logo + Title */}
+          <div style={{ marginBottom:28 }}>
+            <div style={{ width:50, height:50, borderRadius:14, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:19, color:"white", boxShadow:"0 8px 20px rgba(99,102,241,0.32)", marginBottom:20, fontFamily:"'DM Sans',sans-serif" }}>SC</div>
+            <h1 style={{ fontFamily:"'Instrument Serif', Georgia, serif", fontSize:32, fontWeight:400, color:"#0f172a", marginBottom:6, letterSpacing:"-0.3px" }}>Welcome back</h1>
+            <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:14, color:"#94a3b8", lineHeight:1.6 }}>Sign in to your Smart Campus account.</p>
           </div>
-          <h1 style={cardTitle}>Welcome back</h1>
-          <p style={cardSub}>Sign in to your Smart Campus account.</p>
 
-          {/* Error banner */}
+          {/* Error */}
           {error && (
-            <div style={errorBanner}>
-              <span style={{ marginRight: "8px" }}>⚠️</span>
-              {error}
+            <div className="lg-err" style={{ background:"#fff1f2", border:"1.5px solid #fecdd3", borderRadius:11, padding:"11px 14px", fontSize:13, color:"#e11d48", fontWeight:500, marginBottom:20, fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:16 }}>⚠️</span> {error}
             </div>
           )}
 
           {/* Email */}
-          <div style={fieldGroup}>
-            <label style={fieldLabel}>Email address</label>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:"block", fontFamily:"'DM Sans',sans-serif", fontSize:12, fontWeight:700, color:"#374151", marginBottom:7, textTransform:"uppercase", letterSpacing:"0.06em" }}>Email</label>
             <input
-              className={`sc-field-input${error ? " error-state" : ""}`}
-              style={fieldInput}
-              type="email"
-              placeholder="you@university.edu"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setError(""); }}
-              onKeyDown={handleKeyDown}
-              autoComplete="email"
-              disabled={loading}
+              className={`lg-inp${error ? " has-err" : ""}`}
+              type="email" placeholder="you@iau.edu.sa"
+              value={email} onChange={e=>{setEmail(e.target.value);setError("");}}
+              onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+              autoComplete="email" disabled={loading}
             />
           </div>
 
           {/* Password */}
-          <div style={fieldGroup}>
-            <label style={fieldLabel}>Password</label>
-            <div style={passWrapper}>
+          <div style={{ marginBottom:10 }}>
+            <label style={{ display:"block", fontFamily:"'DM Sans',sans-serif", fontSize:12, fontWeight:700, color:"#374151", marginBottom:7, textTransform:"uppercase", letterSpacing:"0.06em" }}>Password</label>
+            <div style={{ position:"relative" }}>
               <input
-                className={`sc-field-input${error ? " error-state" : ""}`}
-                style={{ ...fieldInput, paddingRight: "44px" }}
-                type={showPass ? "text" : "password"}
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                onKeyDown={handleKeyDown}
-                autoComplete="current-password"
-                disabled={loading}
+                className={`lg-inp${error ? " has-err" : ""}`}
+                style={{ paddingRight:46 }}
+                type={showPass ? "text" : "password"} placeholder="Enter your password"
+                value={password} onChange={e=>{setPassword(e.target.value);setError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+                autoComplete="current-password" disabled={loading}
               />
-              <button
-                className="sc-eye-btn"
-                style={eyeBtn}
-                onClick={() => setShowPass(!showPass)}
-                tabIndex={-1}
-                type="button"
-              >
+              <button className="lg-eye" onClick={()=>setShowPass(!showPass)} type="button" tabIndex={-1}>
                 {showPass ? "🙈" : "👁"}
               </button>
             </div>
           </div>
 
-          {/* Forgot password */}
-          <div style={{ textAlign: "right", marginTop: "-8px", marginBottom: "18px" }}>
-            <Link to="/forgot-password" className="sc-forgot">Forgot password?</Link>
+          {/* Forgot */}
+          <div style={{ textAlign:"right", marginBottom:22 }}>
+            <Link to="/forgot-password" className="lg-forgot">Forgot password?</Link>
           </div>
 
           {/* Submit */}
-          <button
-            className="sc-submit-btn"
-            style={submitBtn}
-            onClick={handleLogin}
-            disabled={loading}
-          >
-            {loading
-              ? <><span className="sc-spinner" /> &nbsp;Signing in…</>
-              : "Sign In →"
-            }
+          <button className="lg-btn" onClick={handleLogin} disabled={loading}>
+            {loading ? <><span className="lg-spin" />&nbsp; Signing in…</> : "Sign In →"}
           </button>
 
-          {/* Divider */}
-          <div className="sc-divider">or</div>
+          <div className="lg-divider">or</div>
 
-          {/* Register link */}
-          <p style={footerText}>
-            Don&apos;t have an account?{" "}
-            <Link to="/register" style={footerLink}>Create one free</Link>
+          <p style={{ textAlign:"center", fontFamily:"'DM Sans',sans-serif", fontSize:14, color:"#64748b", margin:0 }}>
+            Don't have an account?{" "}
+            <Link to="/register" style={{ color:"#6366f1", fontWeight:700, textDecoration:"none" }}>Create one free</Link>
           </p>
 
         </div>
@@ -270,224 +314,8 @@ export default function Login() {
   );
 }
 
-// ── Styles ──────────────────────────────────────────────────────────────────
 const page = {
   display: "flex",
   minHeight: "100vh",
   fontFamily: "'DM Sans', system-ui, sans-serif",
-};
-
-const leftPanel = {
-  position: "relative",
-  width: "420px",
-  minWidth: "420px",
-  background: "linear-gradient(155deg, #0f172a 0%, #1e3a5f 50%, #1e293b 100%)",
-  overflow: "hidden",
-};
-
-const leftContent = {
-  position: "relative",
-  zIndex: 1,
-  padding: "48px 36px",
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-  width: "100%",
-};
-
-const brandMark = {
-  width: "48px",
-  height: "48px",
-  borderRadius: "14px",
-  background: "#2563eb",
-  color: "white",
-  fontWeight: "800",
-  fontSize: "18px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  marginBottom: "24px",
-  boxShadow: "0 8px 20px rgba(37,99,235,0.4)",
-};
-
-const leftTitle = {
-  fontSize: "30px",
-  fontWeight: "800",
-  color: "white",
-  margin: "0 0 12px",
-  letterSpacing: "-0.5px",
-};
-
-const leftSub = {
-  fontSize: "15px",
-  color: "rgba(255,255,255,0.6)",
-  lineHeight: "1.7",
-  margin: "0 0 36px",
-};
-
-const featureList = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "10px",
-};
-
-const featCard = {
-  display: "flex",
-  alignItems: "center",
-  gap: "12px",
-  padding: "12px 14px",
-  borderRadius: "12px",
-  background: "rgba(255,255,255,0.07)",
-  border: "1px solid rgba(255,255,255,0.1)",
-};
-
-const featIcon = {
-  fontSize: "18px",
-  width: "28px",
-  textAlign: "center",
-  flexShrink: 0,
-};
-
-const rightPanel = {
-  flex: 1,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "#f8fafc",
-  padding: "32px 20px",
-};
-
-const card = {
-  width: "100%",
-  maxWidth: "420px",
-  background: "white",
-  borderRadius: "22px",
-  padding: "40px 36px",
-  boxShadow: "0 8px 40px rgba(15,23,42,0.12), 0 1px 4px rgba(15,23,42,0.06)",
-  border: "1.5px solid #e2e8f0",
-};
-
-const backLink = {
-  display: "inline-block",
-  marginBottom: "28px",
-  fontSize: "13px",
-  fontWeight: "600",
-  color: "#64748b",
-  textDecoration: "none",
-  transition: "color 0.15s",
-};
-
-const logoWrap = {
-  marginBottom: "20px",
-};
-
-const logo = {
-  width: "52px",
-  height: "52px",
-  borderRadius: "15px",
-  background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-  color: "white",
-  fontWeight: "800",
-  fontSize: "20px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  boxShadow: "0 8px 22px rgba(37,99,235,0.36)",
-};
-
-const cardTitle = {
-  fontSize: "27px",
-  fontWeight: "800",
-  color: "#0f172a",
-  margin: "0 0 6px",
-  letterSpacing: "-0.5px",
-};
-
-const cardSub = {
-  fontSize: "14px",
-  color: "#64748b",
-  margin: "0 0 24px",
-  lineHeight: "1.6",
-};
-
-const errorBanner = {
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  borderRadius: "10px",
-  padding: "11px 14px",
-  fontSize: "13px",
-  color: "#dc2626",
-  fontWeight: "500",
-  marginBottom: "18px",
-  display: "flex",
-  alignItems: "center",
-};
-
-const fieldGroup = {
-  marginBottom: "16px",
-};
-
-const fieldLabel = {
-  display: "block",
-  fontSize: "13px",
-  fontWeight: "700",
-  color: "#374151",
-  marginBottom: "6px",
-  letterSpacing: "0.01em",
-};
-
-const fieldInput = {
-  width: "100%",
-  padding: "11px 14px",
-  borderRadius: "10px",
-  border: "1.5px solid #e2e8f0",
-  fontSize: "14px",
-  color: "#0f172a",
-  background: "#f8fafc",
-  transition: "border-color 0.15s, box-shadow 0.15s, background 0.15s",
-  fontFamily: "'DM Sans', sans-serif",
-};
-
-const passWrapper = {
-  position: "relative",
-  display: "flex",
-  alignItems: "center",
-};
-
-const eyeBtn = {
-  position: "absolute",
-  right: "12px",
-  fontSize: "16px",
-  lineHeight: 1,
-};
-
-const submitBtn = {
-  width: "100%",
-  padding: "13px",
-  borderRadius: "11px",
-  border: "none",
-  background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-  color: "white",
-  fontWeight: "700",
-  fontSize: "15px",
-  cursor: "pointer",
-  boxShadow: "0 4px 14px rgba(37,99,235,0.28)",
-  fontFamily: "'DM Sans', sans-serif",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "6px",
-};
-
-const footerText = {
-  textAlign: "center",
-  fontSize: "14px",
-  color: "#64748b",
-  margin: 0,
-};
-
-const footerLink = {
-  color: "#2563eb",
-  fontWeight: "700",
-  textDecoration: "none",
 };
