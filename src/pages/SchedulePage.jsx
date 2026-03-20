@@ -2,8 +2,18 @@ import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 
 const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
-const getH = () => { const t = localStorage.getItem("token"); return t ? { Authorization: `Bearer ${t}` } : {}; };
-const mapEntry = e => ({ id:e.id, courseName:e.courseName, day:e.dayOfWeek, time:`${e.startTime} - ${e.endTime}`, room:e.room||e.classroom?.name||"", color:e.color });
+const getH = () => {
+  const t = localStorage.getItem("token");
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
+const mapEntry = (e) => ({
+  id: e.id,
+  courseName: e.courseName,
+  day: e.dayOfWeek,
+  time: `${e.startTime} - ${e.endTime}`,
+  room: e.room || e.classroom?.name || "",
+  color: e.color,
+});
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
@@ -100,16 +110,21 @@ export default function SchedulePage() {
   const [toast, setToast] = useState("");
   const [courseColorMap, setCourseColorMap] = useState({});
 
+  const cacheKey =
+    `schedule_${localStorage.getItem("userEmail") || localStorage.getItem("userName") || "guest"}`;
+
   useEffect(() => {
     const load = async () => {
       try {
         const res = await axios.get(`${API}/schedule`, { headers: getH() });
         const entries = Array.isArray(res.data) ? res.data.map(mapEntry) : [];
         setSchedule(entries);
-        // cache locally for ParkingPage
-        localStorage.setItem(`schedule_${localStorage.getItem("userName")||"guest"}`, JSON.stringify(entries));
+
+        // حفظ نسخة محلية احتياطية
+        localStorage.setItem(cacheKey, JSON.stringify(entries));
+
         const colorMap = {};
-        entries.forEach(e => {
+        entries.forEach((e) => {
           if (!colorMap[e.courseName]) {
             const idx = Object.keys(colorMap).length % COURSE_COLORS.length;
             colorMap[e.courseName] = COURSE_COLORS[idx];
@@ -117,11 +132,12 @@ export default function SchedulePage() {
         });
         setCourseColorMap(colorMap);
       } catch {
-        // fallback to localStorage
-        const saved = JSON.parse(localStorage.getItem(`schedule_${localStorage.getItem("userName")||"guest"}`) || "[]");
+        // fallback لو السيرفر ما رد
+        const saved = JSON.parse(localStorage.getItem(cacheKey) || "[]");
         setSchedule(saved);
+
         const colorMap = {};
-        saved.forEach(e => {
+        saved.forEach((e) => {
           if (!colorMap[e.courseName]) {
             const idx = Object.keys(colorMap).length % COURSE_COLORS.length;
             colorMap[e.courseName] = COURSE_COLORS[idx];
@@ -129,14 +145,16 @@ export default function SchedulePage() {
         });
         setCourseColorMap(colorMap);
       }
+
       setRooms(JSON.parse(localStorage.getItem("classrooms") || "[]"));
     };
+
     load();
-  }, []);
+  }, [cacheKey]);
 
   const saveSchedule = (updated) => {
     setSchedule(updated);
-    localStorage.setItem(`schedule_${localStorage.getItem("userName") || "guest"}`, JSON.stringify(updated));
+    localStorage.setItem(cacheKey, JSON.stringify(updated));
   };
 
   const showToast = (msg) => {
@@ -153,24 +171,63 @@ export default function SchedulePage() {
   };
 
   const addSchedule = async () => {
-    if (!courseName.trim() || !day || !startTime || !endTime || !room) { showToast("⚠️ Please fill in all fields"); return; }
-    if (parseTimeToMinutes(endTime) <= parseTimeToMinutes(startTime)) { showToast("⚠️ End time must be after start time"); return; }
+    if (!courseName.trim() || !day || !startTime || !endTime || !room) {
+      showToast("⚠️ Please fill in all fields");
+      return;
+    }
+
+    if (parseTimeToMinutes(endTime) <= parseTimeToMinutes(startTime)) {
+      showToast("⚠️ End time must be after start time");
+      return;
+    }
+
     const color = assignColor(courseName.trim());
+
     try {
-      const res = await axios.post(`${API}/schedule`, { courseName:courseName.trim(), dayOfWeek:day, startTime, endTime, room:room.trim(), color }, { headers:getH() });
-      setSchedule(p => [...p, mapEntry(res.data)]);
-      showToast("✅ Class added!");
+      const res = await axios.post(
+        `${API}/schedule`,
+        {
+          courseName: courseName.trim(),
+          dayOfWeek: day,
+          startTime,
+          endTime,
+          room: room.trim(),
+          color,
+        },
+        { headers: getH() }
+      );
+
+      const updated = [...schedule, mapEntry(res.data)];
+      saveSchedule(updated);
+      showToast("✅ Class added and synced!");
     } catch {
-      const entry = { id:Date.now(), courseName:courseName.trim(), day, time:`${startTime} - ${endTime}`, room:room.trim(), color };
+      const entry = {
+        id: Date.now(),
+        courseName: courseName.trim(),
+        day,
+        time: `${startTime} - ${endTime}`,
+        room: room.trim(),
+        color,
+      };
+
       saveSchedule([...schedule, entry]);
       showToast("✅ Class added (offline)");
     }
-    setCourseName(""); setStartTime(""); setEndTime(""); setRoom(""); setShowForm(false);
+
+    setCourseName("");
+    setStartTime("");
+    setEndTime("");
+    setRoom("");
+    setShowForm(false);
   };
 
   const deleteSchedule = async (id) => {
-    try { await axios.delete(`${API}/schedule/${id}`, { headers:getH() }); } catch {}
-    setSchedule(p => p.filter(s => s.id !== id));
+    try {
+      await axios.delete(`${API}/schedule/${id}`, { headers: getH() });
+    } catch {}
+
+    const updated = schedule.filter((s) => s.id !== id);
+    saveSchedule(updated);
     showToast("🗑 Class removed");
   };
 
@@ -257,37 +314,30 @@ export default function SchedulePage() {
 
         {showForm && (
           <div style={formCard} className="slide-in">
-            <h3
-              style={{
-                margin: "0 0 16px",
-                fontSize: "16px",
-                fontWeight: "700",
-                color: "#0f172a",
-              }}
-            >
+            <h3 style={{ margin: "0 0 18px", fontSize: "18px", color: "#0f172a", fontWeight: 700 }}>
               Add New Class
             </h3>
 
             <div style={formGrid}>
-              <div style={formGroup}>
-                <label style={formLabel}>Course Name</label>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>Course Name</label>
                 <input
                   className="form-input"
-                  style={formInput}
                   type="text"
-                  placeholder="e.g. Data Structures"
                   value={courseName}
                   onChange={(e) => setCourseName(e.target.value)}
+                  placeholder="e.g. Data Structures"
+                  style={inputStyle}
                 />
               </div>
 
-              <div style={formGroup}>
-                <label style={formLabel}>Day</label>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>Day</label>
                 <select
                   className="form-input"
-                  style={formInput}
                   value={day}
                   onChange={(e) => setDay(e.target.value)}
+                  style={inputStyle}
                 >
                   {DAYS.map((d) => (
                     <option key={d} value={d}>
@@ -297,19 +347,13 @@ export default function SchedulePage() {
                 </select>
               </div>
 
-              <div style={formGroup}>
-                <label style={formLabel}>Start Time</label>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>Start Time</label>
                 <select
                   className="form-input"
-                  style={formInput}
                   value={startTime}
-                  onChange={(e) => {
-                    const selected = e.target.value;
-                    setStartTime(selected);
-                    if (endTime && parseTimeToMinutes(endTime) <= parseTimeToMinutes(selected)) {
-                      setEndTime("");
-                    }
-                  }}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  style={inputStyle}
                 >
                   <option value="">Select start time</option>
                   {TIME_OPTIONS.map((time) => (
@@ -320,13 +364,13 @@ export default function SchedulePage() {
                 </select>
               </div>
 
-              <div style={formGroup}>
-                <label style={formLabel}>End Time</label>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>End Time</label>
                 <select
                   className="form-input"
-                  style={formInput}
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
+                  style={inputStyle}
                 >
                   <option value="">Select end time</option>
                   {availableEndTimes.map((time) => (
@@ -337,275 +381,137 @@ export default function SchedulePage() {
                 </select>
               </div>
 
-              <div style={{ ...formGroup, gridColumn: "1 / -1" }}>
-                <label style={formLabel}>Room</label>
+              <div style={{ ...fieldWrap, gridColumn: "1 / -1" }}>
+                <label style={labelStyle}>Room</label>
                 <input
                   className="form-input"
-                  style={formInput}
                   type="text"
-                  placeholder="e.g. G101, Lab 3, Building A"
+                  list="rooms-list"
                   value={room}
                   onChange={(e) => setRoom(e.target.value)}
-                  list="rooms-suggestions"
+                  placeholder="e.g. A-102"
+                  style={inputStyle}
                 />
-                <datalist id="rooms-suggestions">
-                  {rooms.map((r, i) => {
-                    const name = r.name || r.roomName || r;
-                    return <option key={i} value={name} />;
-                  })}
+                <datalist id="rooms-list">
+                  {rooms.map((r, idx) => (
+                    <option key={idx} value={r.name || r.room || ""} />
+                  ))}
                 </datalist>
               </div>
             </div>
 
-            <button className="add-btn" onClick={addSchedule} style={confirmBtnStyle}>
-              Add to Schedule →
-            </button>
-          </div>
-        )}
-
-        {schedule.length > 0 && (
-          <div style={viewToggleRow}>
-            <div style={viewToggle}>
-              {["week", "day"].map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  style={{
-                    padding: "8px 18px",
-                    borderRadius: "8px",
-                    border: "none",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    fontFamily: "'DM Sans'",
-                    background: viewMode === mode ? "#0f172a" : "transparent",
-                    color: viewMode === mode ? "white" : "#64748b",
-                    transition: "all 0.15s",
-                  }}
-                >
-                  {mode === "week" ? "📅 Week" : "📋 Day"}
-                </button>
-              ))}
-            </div>
-
-            <div style={dayTabs}>
-              {DAYS.map((d) => {
-                const count = getDayEntries(d).length;
-                const isToday = d === DAYS[getCurrentDayIndex()];
-                const isActive = d === activeDay;
-                return (
-                  <div
-                    key={d}
-                    className="day-tab"
-                    onClick={() => {
-                      setActiveDay(d);
-                      setViewMode("day");
-                    }}
-                    style={{
-                      padding: "8px 14px",
-                      borderRadius: "10px",
-                      fontWeight: isActive ? "700" : "500",
-                      fontSize: "13px",
-                      color: isActive ? "white" : isToday ? "#2563eb" : "#475569",
-                      background: isActive ? "#2563eb" : isToday ? "#eff6ff" : "white",
-                      border: `1.5px solid ${
-                        isActive ? "#2563eb" : isToday ? "#bfdbfe" : "#e2e8f0"
-                      }`,
-                      position: "relative",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    <span>{DAY_SHORT[d]}</span>
-                    {count > 0 && (
-                      <span
-                        style={{
-                          background: isActive ? "rgba(255,255,255,0.3)" : "#e2e8f0",
-                          color: isActive ? "white" : "#475569",
-                          borderRadius: "999px",
-                          fontSize: "11px",
-                          padding: "1px 7px",
-                          fontWeight: "700",
-                        }}
-                      >
-                        {count}
-                      </span>
-                    )}
-                    {isToday && !isActive && (
-                      <span
-                        style={{
-                          width: "6px",
-                          height: "6px",
-                          background: "#2563eb",
-                          borderRadius: "50%",
-                          position: "absolute",
-                          top: "4px",
-                          right: "4px",
-                        }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px" }}>
+              <button className="add-btn" onClick={addSchedule} style={confirmBtnStyle}>
+                Save Class
+              </button>
             </div>
           </div>
         )}
 
-        {schedule.length === 0 && (
-          <div style={emptyState}>
-            <div style={{ fontSize: "52px", marginBottom: "14px" }}>🗓</div>
-            <p
-              style={{
-                fontWeight: "700",
-                fontSize: "20px",
-                color: "#0f172a",
-                margin: "0 0 8px",
-              }}
-            >
-              No classes yet
-            </p>
-            <p style={{ color: "#64748b", margin: "0 0 20px" }}>
-              Add your first class using the button above.
-            </p>
-            <button className="add-btn" onClick={() => setShowForm(true)} style={addBtnStyle}>
-              + Add First Class
-            </button>
+        <div style={viewSwitchWrap}>
+          <button
+            onClick={() => setViewMode("week")}
+            style={viewMode === "week" ? activeSwitchBtn : switchBtn}
+          >
+            Week View
+          </button>
+          <button
+            onClick={() => setViewMode("day")}
+            style={viewMode === "day" ? activeSwitchBtn : switchBtn}
+          >
+            Day View
+          </button>
+        </div>
+
+        {viewMode === "day" && (
+          <div style={dayTabsWrap}>
+            {DAYS.map((d) => (
+              <button
+                key={d}
+                className="day-tab"
+                onClick={() => setActiveDay(d)}
+                style={activeDay === d ? activeDayTab : dayTab}
+              >
+                <span style={{ fontWeight: 700 }}>{DAY_SHORT[d]}</span>
+                <span style={{ fontSize: "11px", opacity: 0.9 }}>{getDayEntries(d).length}</span>
+              </button>
+            ))}
           </div>
         )}
 
-        {schedule.length > 0 && viewMode === "week" && (
-          <div style={{ overflowX: "auto" }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: `repeat(${DAYS.length}, minmax(180px, 1fr))`,
-                gap: "12px",
-                minWidth: "820px",
-              }}
-            >
-              {DAYS.map((d) => {
-                const entries = getDayEntries(d);
-                const isToday = d === DAYS[getCurrentDayIndex()];
+        {viewMode === "week" ? (
+          <div style={weekWrap}>
+            <div className="sc-week-grid" style={weekGrid}>
+              {DAYS.map((dayName) => {
+                const entries = getDayEntries(dayName);
                 return (
-                  <div key={d}>
-                    <div
-                      style={{
-                        padding: "10px 14px",
-                        borderRadius: "12px",
-                        marginBottom: "10px",
-                        textAlign: "center",
-                        background: isToday ? "#0f172a" : "white",
-                        border: `1.5px solid ${isToday ? "#0f172a" : "#e2e8f0"}`,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontWeight: "700",
-                          fontSize: "14px",
-                          color: isToday ? "white" : "#0f172a",
-                        }}
-                      >
-                        {d}
+                  <div key={dayName} style={dayColumn}>
+                    <div style={dayColumnHeader}>
+                      <div style={{ fontWeight: 800, fontSize: "15px", color: "#0f172a" }}>
+                        {dayName}
                       </div>
-                      {isToday && (
-                        <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
-                          Today
-                        </div>
-                      )}
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: isToday ? "#94a3b8" : "#64748b",
-                          marginTop: "2px",
-                        }}
-                      >
-                        {entries.length} {entries.length === 1 ? "class" : "classes"}
+                      <div style={{ fontSize: "12px", color: "#64748b" }}>
+                        {entries.length} class{entries.length !== 1 ? "es" : ""}
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={dayColumnBody}>
                       {entries.length === 0 ? (
-                        <div
-                          style={{
-                            padding: "20px 14px",
-                            textAlign: "center",
-                            color: "#cbd5e1",
-                            fontSize: "13px",
-                            background: "#fafafa",
-                            borderRadius: "12px",
-                            border: "1.5px dashed #e2e8f0",
-                          }}
-                        >
-                          No classes
-                        </div>
+                        <div style={emptyDayStyle}>No classes</div>
                       ) : (
                         entries.map((entry) => {
-                          const color = courseColorMap[entry.courseName] || COURSE_COLORS[0];
+                          const [start, end] = entry.time.split("-").map((s) => s.trim());
                           const duration = getDuration(entry.time);
-                          const parts = entry.time?.split("-").map((t) => t.trim());
 
                           return (
                             <div
                               key={entry.id}
                               className="hover-card fade-in"
                               style={{
-                                background: color.bg,
-                                border: `1.5px solid ${color.border}`,
-                                borderRadius: "12px",
-                                padding: "12px",
-                                position: "relative",
-                                borderLeft: `4px solid ${color.accent}`,
+                                ...eventCard,
+                                background: entry.color?.bg || "#f8fafc",
+                                border: `1px solid ${entry.color?.border || "#e2e8f0"}`,
                               }}
                             >
-                              <button
-                                className="icon-btn"
-                                onClick={() => deleteSchedule(entry.id)}
-                                style={{
-                                  position: "absolute",
-                                  top: "8px",
-                                  right: "8px",
-                                  color: "#cbd5e1",
-                                  fontSize: "13px",
-                                  padding: "3px 6px",
-                                  borderRadius: "6px",
-                                }}
-                                title="Remove"
-                              >
-                                ✕
-                              </button>
-
                               <div
                                 style={{
-                                  fontWeight: "700",
-                                  fontSize: "13px",
-                                  color: color.text,
-                                  marginBottom: "6px",
-                                  paddingRight: "20px",
+                                  width: "4px",
+                                  borderRadius: "999px",
+                                  background: entry.color?.accent || "#2563eb",
+                                  alignSelf: "stretch",
                                 }}
-                              >
-                                {entry.courseName}
-                              </div>
+                              />
 
-                              <div
-                                style={{
-                                  fontSize: "11px",
-                                  color: "#64748b",
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "3px",
-                                }}
-                              >
-                                <span>
-                                  🕐 {parts?.[0] ? formatDisplayTime(parts[0]) : ""} –{" "}
-                                  {parts?.[1] ? formatDisplayTime(parts[1]) : ""}
-                                </span>
-                                {duration && (
-                                  <span style={{ color: color.text, fontWeight: "600" }}>
-                                    ⏱ {duration}
-                                  </span>
-                                )}
-                                <span>📍 {entry.room}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={eventTopRow}>
+                                  <div
+                                    style={{
+                                      fontWeight: 800,
+                                      color: entry.color?.text || "#0f172a",
+                                      fontSize: "14px",
+                                      lineHeight: 1.2,
+                                    }}
+                                  >
+                                    {entry.courseName}
+                                  </div>
+                                  <button
+                                    className="icon-btn"
+                                    onClick={() => deleteSchedule(entry.id)}
+                                    style={deleteBtn}
+                                    title="Delete class"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+
+                                <div style={eventMeta}>
+                                  <span>🕒 {formatDisplayTime(start)} - {formatDisplayTime(end)}</span>
+                                  {duration && <span>• {duration}</span>}
+                                </div>
+
+                                <div style={roomBadge}>
+                                  📍 {entry.room || "No room"}
+                                </div>
                               </div>
                             </div>
                           );
@@ -617,219 +523,95 @@ export default function SchedulePage() {
               })}
             </div>
           </div>
-        )}
-
-        {schedule.length > 0 && viewMode === "day" && (
-          <div style={dayViewContainer} className="fade-in">
-            <h2
-              style={{
-                margin: "0 0 20px",
-                fontSize: "20px",
-                fontWeight: "700",
-                color: "#0f172a",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              {activeDay}
-              {activeDay === DAYS[getCurrentDayIndex()] && (
-                <span
-                  style={{
-                    fontSize: "12px",
-                    background: "#2563eb",
-                    color: "white",
-                    padding: "3px 10px",
-                    borderRadius: "999px",
-                    fontWeight: "600",
-                  }}
-                >
-                  Today
-                </span>
-              )}
-            </h2>
-
-            {getDayEntries(activeDay).length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 20px", color: "#94a3b8" }}>
-                <div style={{ fontSize: "40px", marginBottom: "10px" }}>😌</div>
-                <p style={{ fontWeight: "600" }}>No classes on {activeDay}</p>
+        ) : (
+          <div style={singleDayWrap}>
+            <div style={singleDayHeader}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "20px", color: "#0f172a" }}>{activeDay}</h2>
+                <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "13px" }}>
+                  {getDayEntries(activeDay).length} class{getDayEntries(activeDay).length !== 1 ? "es" : ""}
+                </p>
               </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {getDayEntries(activeDay).map((entry) => {
-                  const color = courseColorMap[entry.courseName] || COURSE_COLORS[0];
+            </div>
+
+            <div style={{ display: "grid", gap: "14px" }}>
+              {getDayEntries(activeDay).length === 0 ? (
+                <div style={emptyStateCard}>
+                  <div style={{ fontSize: "40px" }}>📅</div>
+                  <div style={{ fontWeight: 700, color: "#0f172a" }}>No classes for {activeDay}</div>
+                  <div style={{ color: "#64748b", fontSize: "14px" }}>
+                    Add a class to start building your schedule.
+                  </div>
+                </div>
+              ) : (
+                getDayEntries(activeDay).map((entry) => {
+                  const [start, end] = entry.time.split("-").map((s) => s.trim());
                   const duration = getDuration(entry.time);
-                  const parts = entry.time?.split("-").map((t) => t.trim());
-                  const startMins = parseTimeToMinutes(parts?.[0]);
-                  const endMins = parseTimeToMinutes(parts?.[1]);
-                  const nowMins = getCurrentMinutes();
-                  const isOngoing =
-                    nowMins >= startMins &&
-                    nowMins < endMins &&
-                    activeDay === DAYS[getCurrentDayIndex()];
-                  const isPast =
-                    nowMins >= endMins && activeDay === DAYS[getCurrentDayIndex()];
+                  const nowMinutes = getCurrentMinutes();
+                  const currentDayName = DAYS[getCurrentDayIndex()];
+                  const startMinutes = parseTimeToMinutes(start);
+                  const endMinutes = parseTimeToMinutes(end);
+
+                  const isNow =
+                    currentDayName === entry.day &&
+                    nowMinutes >= startMinutes &&
+                    nowMinutes < endMinutes;
 
                   return (
                     <div
                       key={entry.id}
                       className="hover-card fade-in"
                       style={{
-                        background: isPast ? "#f8fafc" : "white",
-                        border: `1.5px solid ${isOngoing ? color.accent : "#e2e8f0"}`,
-                        borderRadius: "16px",
-                        padding: "18px 20px",
-                        display: "flex",
-                        gap: "18px",
-                        alignItems: "flex-start",
-                        opacity: isPast ? 0.65 : 1,
-                        boxShadow: isOngoing
-                          ? `0 0 0 3px ${color.accent}22`
-                          : "0 2px 8px rgba(15,23,42,0.05)",
+                        ...singleEventCard,
+                        background: entry.color?.bg || "#fff",
+                        border: `1px solid ${entry.color?.border || "#e2e8f0"}`,
                       }}
                     >
-                      <div style={{ minWidth: "80px", textAlign: "center" }}>
-                        <div
-                          style={{
-                            fontFamily: "'DM Mono'",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                            color: color.accent,
-                          }}
-                        >
-                          {parts?.[0] ? formatDisplayTime(parts[0]) : ""}
-                        </div>
-                        <div
-                          style={{
-                            width: "1px",
-                            height: "20px",
-                            background: "#e2e8f0",
-                            margin: "6px auto",
-                          }}
-                        />
-                        <div
-                          style={{
-                            fontFamily: "'DM Mono'",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                            color: "#94a3b8",
-                          }}
-                        >
-                          {parts?.[1] ? formatDisplayTime(parts[1]) : ""}
-                        </div>
-                      </div>
-
                       <div
                         style={{
-                          width: "4px",
+                          width: "6px",
                           borderRadius: "999px",
-                          background: color.accent,
+                          background: entry.color?.accent || "#2563eb",
                           alignSelf: "stretch",
-                          flexShrink: 0,
                         }}
                       />
 
                       <div style={{ flex: 1 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            marginBottom: "8px",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <h3
-                            style={{
-                              margin: 0,
-                              fontSize: "16px",
-                              fontWeight: "700",
-                              color: "#0f172a",
-                            }}
+                        <div style={eventTopRow}>
+                          <div>
+                            <div
+                              style={{
+                                fontSize: "16px",
+                                fontWeight: 800,
+                                color: entry.color?.text || "#0f172a",
+                              }}
+                            >
+                              {entry.courseName}
+                            </div>
+                            {isNow && <div style={liveBadge}>Happening now</div>}
+                          </div>
+
+                          <button
+                            className="icon-btn"
+                            onClick={() => deleteSchedule(entry.id)}
+                            style={deleteBtn}
+                            title="Delete class"
                           >
-                            {entry.courseName}
-                          </h3>
-
-                          {isOngoing && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                background: color.bg,
-                                color: color.text,
-                                border: `1px solid ${color.border}`,
-                                padding: "3px 10px",
-                                borderRadius: "999px",
-                                fontWeight: "700",
-                              }}
-                            >
-                              🔴 Live
-                            </span>
-                          )}
-
-                          {isPast && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                background: "#f1f5f9",
-                                color: "#94a3b8",
-                                padding: "3px 10px",
-                                borderRadius: "999px",
-                                fontWeight: "600",
-                              }}
-                            >
-                              Done
-                            </span>
-                          )}
+                            ✕
+                          </button>
                         </div>
 
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
-                          <span
-                            style={{
-                              fontSize: "13px",
-                              color: "#64748b",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "5px",
-                            }}
-                          >
-                            📍 <strong style={{ color: "#334155" }}>{entry.room}</strong>
-                          </span>
-
-                          {duration && (
-                            <span
-                              style={{
-                                fontSize: "13px",
-                                color: "#64748b",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "5px",
-                              }}
-                            >
-                              ⏱ <strong style={{ color: "#334155" }}>{duration}</strong>
-                            </span>
-                          )}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "8px" }}>
+                          <div style={pillMeta}>🕒 {formatDisplayTime(start)} - {formatDisplayTime(end)}</div>
+                          {duration && <div style={pillMeta}>⏱ {duration}</div>}
+                          <div style={pillMeta}>📍 {entry.room || "No room"}</div>
                         </div>
                       </div>
-
-                      <button
-                        className="icon-btn"
-                        onClick={() => deleteSchedule(entry.id)}
-                        style={{
-                          color: "#cbd5e1",
-                          fontSize: "15px",
-                          padding: "4px 8px",
-                          borderRadius: "8px",
-                          flexShrink: 0,
-                        }}
-                        title="Remove"
-                      >
-                        ✕
-                      </button>
                     </div>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -839,168 +621,330 @@ export default function SchedulePage() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const page = {
-  padding: "24px 20px 48px",
-  fontFamily: "'DM Sans', sans-serif",
   minHeight: "100vh",
-  background: "#f8fafc",
+  background: "linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)",
+  padding: "24px",
+  fontFamily: "'DM Sans', sans-serif",
 };
 
-const container = { maxWidth: "1100px", margin: "0 auto" };
+const container = {
+  maxWidth: "1280px",
+  margin: "0 auto",
+  display: "grid",
+  gap: "18px",
+};
 
 const headerRow = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "center",
+  gap: "14px",
   flexWrap: "wrap",
-  gap: "16px",
-  marginBottom: "20px",
 };
 
 const titleStyle = {
+  margin: 0,
   fontSize: "32px",
-  fontWeight: "800",
+  fontWeight: 800,
   color: "#0f172a",
-  margin: "0 0 4px",
-  letterSpacing: "-0.6px",
+  letterSpacing: "-0.02em",
 };
 
-const subtitleStyle = { color: "#64748b", fontSize: "15px", margin: 0 };
+const subtitleStyle = {
+  margin: "6px 0 0",
+  color: "#64748b",
+  fontSize: "14px",
+};
 
 const addBtnStyle = {
-  padding: "11px 22px",
-  borderRadius: "10px",
   border: "none",
-  background: "#2563eb",
+  borderRadius: "14px",
+  padding: "12px 18px",
+  background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
   color: "white",
-  fontWeight: "700",
+  fontWeight: 700,
   fontSize: "14px",
+  boxShadow: "0 10px 24px rgba(37,99,235,0.22)",
   cursor: "pointer",
-  fontFamily: "'DM Sans'",
-  boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
-  transition: "filter 0.15s, transform 0.1s",
 };
 
 const statsRow = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: "12px",
-  marginBottom: "20px",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: "14px",
 };
 
 const statCard = {
   background: "white",
-  borderRadius: "16px",
-  padding: "16px 20px",
-  border: "1.5px solid #e2e8f0",
+  border: "1px solid #e2e8f0",
+  borderRadius: "20px",
+  padding: "18px",
   display: "flex",
   flexDirection: "column",
-  boxShadow: "0 2px 10px rgba(15,23,42,0.06)",
-  transition: "box-shadow 0.18s, transform 0.18s",
+  boxShadow: "0 4px 16px rgba(15,23,42,0.04)",
 };
 
 const formCard = {
   background: "white",
-  borderRadius: "18px",
-  padding: "24px",
-  border: "1.5px solid #e2e8f0",
-  boxShadow: "0 4px 20px rgba(15,23,42,0.08)",
-  marginBottom: "20px",
+  border: "1px solid #e2e8f0",
+  borderRadius: "22px",
+  padding: "20px",
+  boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
 };
 
 const formGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: "14px",
-  marginBottom: "16px",
 };
 
-const formGroup = { display: "flex", flexDirection: "column", gap: "6px" };
-
-const formLabel = {
-  fontSize: "12px",
-  fontWeight: "700",
-  color: "#475569",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
+const fieldWrap = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
 };
 
-const formInput = {
-  padding: "11px 14px",
-  borderRadius: "10px",
-  border: "1.5px solid #e2e8f0",
-  fontSize: "14px",
+const labelStyle = {
+  fontSize: "13px",
+  fontWeight: 700,
+  color: "#334155",
+};
+
+const inputStyle = {
+  height: "46px",
+  borderRadius: "14px",
+  border: "1px solid #cbd5e1",
+  padding: "0 14px",
   background: "#f8fafc",
+  fontSize: "14px",
   color: "#0f172a",
-  fontFamily: "'DM Sans'",
-  transition: "border-color 0.15s, box-shadow 0.15s",
-  width: "100%",
 };
 
 const confirmBtnStyle = {
-  padding: "12px 26px",
-  borderRadius: "10px",
   border: "none",
-  background: "#0f172a",
+  borderRadius: "14px",
+  padding: "11px 18px",
+  background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
   color: "white",
-  fontWeight: "700",
+  fontWeight: 700,
   fontSize: "14px",
+  boxShadow: "0 8px 18px rgba(22,163,74,0.2)",
   cursor: "pointer",
-  fontFamily: "'DM Sans'",
-  boxShadow: "0 4px 12px rgba(15,23,42,0.2)",
-  transition: "filter 0.15s",
 };
 
-const viewToggleRow = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "12px",
-  marginBottom: "18px",
-};
-
-const viewToggle = {
+const viewSwitchWrap = {
   display: "inline-flex",
-  background: "#f1f5f9",
-  borderRadius: "10px",
-  padding: "4px",
+  gap: "8px",
+  background: "white",
+  border: "1px solid #e2e8f0",
+  borderRadius: "16px",
+  padding: "6px",
   width: "fit-content",
+  boxShadow: "0 4px 16px rgba(15,23,42,0.04)",
 };
 
-const dayTabs = {
+const switchBtn = {
+  border: "none",
+  borderRadius: "12px",
+  padding: "10px 14px",
+  background: "transparent",
+  color: "#475569",
+  fontWeight: 700,
+  fontSize: "13px",
+  cursor: "pointer",
+};
+
+const activeSwitchBtn = {
+  ...switchBtn,
+  background: "#2563eb",
+  color: "white",
+};
+
+const dayTabsWrap = {
   display: "flex",
-  gap: "8px",
+  gap: "10px",
   flexWrap: "wrap",
 };
 
-const dayViewContainer = {
+const dayTab = {
+  border: "1px solid #e2e8f0",
   background: "white",
-  borderRadius: "20px",
-  padding: "26px",
-  border: "1.5px solid #e2e8f0",
-  boxShadow: "0 4px 20px rgba(15,23,42,0.07)",
+  borderRadius: "16px",
+  padding: "12px 14px",
+  minWidth: "84px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "4px",
+  alignItems: "center",
+  color: "#334155",
 };
 
-const emptyState = {
-  textAlign: "center",
-  padding: "60px 20px",
+const activeDayTab = {
+  ...dayTab,
+  background: "#2563eb",
+  border: "1px solid #2563eb",
+  color: "white",
+  boxShadow: "0 10px 18px rgba(37,99,235,0.2)",
+};
+
+const weekWrap = {
+  overflowX: "auto",
+};
+
+const weekGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(220px, 1fr))",
+  gap: "14px",
+  alignItems: "start",
+};
+
+const dayColumn = {
   background: "white",
+  border: "1px solid #e2e8f0",
+  borderRadius: "22px",
+  overflow: "hidden",
+  minHeight: "460px",
+  boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+};
+
+const dayColumnHeader = {
+  padding: "16px 16px 14px",
+  borderBottom: "1px solid #e2e8f0",
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+};
+
+const dayColumnBody = {
+  padding: "14px",
+  display: "grid",
+  gap: "12px",
+};
+
+const emptyDayStyle = {
+  minHeight: "120px",
+  display: "grid",
+  placeItems: "center",
+  color: "#94a3b8",
+  fontSize: "14px",
+  border: "1px dashed #cbd5e1",
+  borderRadius: "18px",
+  background: "#f8fafc",
+};
+
+const eventCard = {
+  display: "flex",
+  gap: "12px",
+  borderRadius: "18px",
+  padding: "14px",
+  boxShadow: "0 4px 10px rgba(15,23,42,0.03)",
+};
+
+const eventTopRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "10px",
+};
+
+const eventMeta = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  marginTop: "8px",
+  fontSize: "12px",
+  color: "#475569",
+};
+
+const roomBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  marginTop: "10px",
+  padding: "7px 10px",
+  borderRadius: "999px",
+  background: "rgba(255,255,255,0.55)",
+  fontSize: "12px",
+  color: "#334155",
+  border: "1px solid rgba(148,163,184,0.25)",
+};
+
+const deleteBtn = {
+  color: "#94a3b8",
+  fontSize: "16px",
+  padding: "6px 8px",
+  borderRadius: "10px",
+};
+
+const singleDayWrap = {
+  background: "white",
+  border: "1px solid #e2e8f0",
+  borderRadius: "22px",
+  padding: "18px",
+  boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+  display: "grid",
+  gap: "16px",
+};
+
+const singleDayHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "12px",
+};
+
+const singleEventCard = {
+  display: "flex",
+  gap: "14px",
   borderRadius: "20px",
-  border: "1.5px dashed #e2e8f0",
+  padding: "16px",
+  boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+};
+
+const pillMeta = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "6px",
+  padding: "8px 12px",
+  borderRadius: "999px",
+  background: "rgba(255,255,255,0.7)",
+  border: "1px solid rgba(148,163,184,0.22)",
+  color: "#334155",
+  fontSize: "13px",
+};
+
+const emptyStateCard = {
+  minHeight: "220px",
+  border: "1px dashed #cbd5e1",
+  borderRadius: "20px",
+  background: "#f8fafc",
+  display: "grid",
+  placeItems: "center",
+  textAlign: "center",
+  gap: "8px",
+  padding: "20px",
+};
+
+const liveBadge = {
+  marginTop: "6px",
+  display: "inline-flex",
+  width: "fit-content",
+  padding: "5px 10px",
+  borderRadius: "999px",
+  background: "#dcfce7",
+  color: "#166534",
+  fontSize: "12px",
+  fontWeight: 700,
 };
 
 const toastStyle = {
   position: "fixed",
-  bottom: "28px",
-  left: "50%",
-  transform: "translateX(-50%)",
+  top: "20px",
+  right: "20px",
+  zIndex: 9999,
   background: "#0f172a",
   color: "white",
-  padding: "13px 26px",
-  borderRadius: "999px",
-  fontSize: "14px",
-  fontWeight: "700",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.20)",
-  zIndex: 9999,
-  animation: "fadeUp 0.25s ease",
-  fontFamily: "'DM Sans'",
-  whiteSpace: "nowrap",
+  padding: "12px 16px",
+  borderRadius: "14px",
+  boxShadow: "0 14px 30px rgba(15,23,42,0.2)",
+  fontWeight: 700,
+  fontSize: "13px",
 };
