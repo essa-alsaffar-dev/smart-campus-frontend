@@ -3,19 +3,19 @@ import { useState, useEffect, useMemo } from "react";
 const PRIORITIES = ["Low", "Medium", "High"];
 
 const priorityConfig = {
-  High:   { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: "🔴" },
-  Medium: { color: "#d97706", bg: "#fffbeb", border: "#fde68a", icon: "🟡" },
-  Low:    { color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0", icon: "🟢" },
+  High:   { color: "#ef4444", bg: "#fef2f2", border: "#fecaca", icon: "🔴", accent: "#ef4444" },
+  Medium: { color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", icon: "🟡", accent: "#f59e0b" },
+  Low:    { color: "#10b981", bg: "#f0fdf4", border: "#a7f3d0", icon: "🟢", accent: "#10b981" },
 };
 
 function TasksPage() {
-  const [tasks, setTasks] = useState([]);
-  const [title, setTitle] = useState("");
-  const [priority, setPriority] = useState("Medium");
-  const [dueDate, setDueDate] = useState("");
-  const [filter, setFilter] = useState("All");
+  const [tasks,          setTasks]          = useState([]);
+  const [title,          setTitle]          = useState("");
+  const [priority,       setPriority]       = useState("Medium");
+  const [dueDate,        setDueDate]        = useState("");
+  const [filter,         setFilter]         = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
-  const [successMsg, setSuccessMsg] = useState("");
+  const [successMsg,     setSuccessMsg]     = useState("");
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem(`tasks_v2_${localStorage.getItem("userName") || "guest"}`)) || [];
@@ -34,18 +34,9 @@ function TasksPage() {
 
   const addTask = () => {
     if (title.trim() === "") return;
-    const newTask = {
-      id: Date.now(),
-      title: title.trim(),
-      priority,
-      dueDate,
-      completed: false,
-      createdAt: new Date().toISOString(),
-    };
+    const newTask = { id: Date.now(), title: title.trim(), priority, dueDate, completed: false, createdAt: new Date().toISOString() };
     saveTasks([newTask, ...tasks]);
-    setTitle("");
-    setPriority("Medium");
-    setDueDate("");
+    setTitle(""); setPriority("Medium"); setDueDate("");
     showSuccess("Task added!");
   };
 
@@ -58,21 +49,13 @@ function TasksPage() {
     showSuccess("Task deleted.");
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") addTask();
-  };
+  const handleKeyDown = (e) => { if (e.key === "Enter") addTask(); };
 
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((t) => {
-      const matchStatus =
-        filter === "All" ||
-        (filter === "Active" && !t.completed) ||
-        (filter === "Done" && t.completed);
-      const matchPriority =
-        priorityFilter === "All" || t.priority === priorityFilter;
-      return matchStatus && matchPriority;
-    });
-  }, [tasks, filter, priorityFilter]);
+  const filteredTasks = useMemo(() => tasks.filter((t) => {
+    const ms = filter === "All" || (filter === "Active" && !t.completed) || (filter === "Done" && t.completed);
+    const mp = priorityFilter === "All" || t.priority === priorityFilter;
+    return ms && mp;
+  }), [tasks, filter, priorityFilter]);
 
   const counts = useMemo(() => ({
     all: tasks.length,
@@ -80,174 +63,202 @@ function TasksPage() {
     done: tasks.filter((t) => t.completed).length,
   }), [tasks]);
 
-  const isOverdue = (dueDate) => {
-    if (!dueDate) return false;
-    return new Date(dueDate) < new Date(new Date().toDateString());
-  };
+  const isOverdue = (d) => d && new Date(d) < new Date(new Date().toDateString());
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return null;
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  };
+  const donePercent = counts.all > 0 ? Math.round((counts.done / counts.all) * 100) : 0;
 
   return (
     <div style={pageStyle}>
       <style>{`
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
-* { box-sizing: border-box; }
+        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
+        *, *::before, *::after { box-sizing: border-box; }
 
-.task-input:focus, .task-select:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
-  background: white !important;
-}
-.add-btn { transition: filter 0.15s, transform 0.1s, box-shadow 0.15s; }
-.add-btn:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 8px 22px rgba(37,99,235,0.35); }
-.add-btn:active:not(:disabled) { transform: scale(0.97); }
-.add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        /* ── Inputs ── */
+        .tk-inp:focus, .tk-sel:focus {
+          outline: none;
+          border-color: #6366f1 !important;
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.13) !important;
+          background: white !important;
+        }
+        .tk-inp::placeholder { color: #b0b8cc; }
 
-.task-card {
-  background: white;
-  border-radius: 14px;
-  padding: 16px 18px;
-  border: 1.5px solid #f1f5f9;
-  border-left: 4px solid transparent;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  transition: box-shadow 0.18s, transform 0.15s;
-}
-.task-card:hover {
-  box-shadow: 0 6px 20px rgba(15,23,42,0.09);
-  transform: translateY(-1px);
-}
-.task-card.completed {
-  opacity: 0.55;
-  background: #f8fafc;
-}
-.check-btn {
-  width: 22px; height: 22px;
-  border-radius: 7px;
-  border: 2px solid #cbd5e1;
-  background: white;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px;
-  flex-shrink: 0;
-  margin-top: 2px;
-  transition: background 0.15s, border-color 0.15s, transform 0.1s;
-}
-.check-btn:hover { border-color: #2563eb; transform: scale(1.08); }
-.check-btn.done { background: #22c55e; border-color: #22c55e; color: white; }
+        /* ── Add button ── */
+        .tk-add-btn {
+          transition: filter 0.15s, transform 0.12s, box-shadow 0.15s;
+          position: relative; overflow: hidden;
+        }
+        .tk-add-btn::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+          pointer-events: none;
+        }
+        .tk-add-btn:hover:not(:disabled) {
+          filter: brightness(1.08);
+          box-shadow: 0 8px 24px rgba(99,102,241,0.40) !important;
+          transform: translateY(-1px);
+        }
+        .tk-add-btn:active:not(:disabled) { transform: scale(0.97); }
+        .tk-add-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.delete-btn {
-  background: none; border: none; cursor: pointer;
-  color: #cbd5e1; font-size: 16px; padding: 3px 6px;
-  border-radius: 6px; transition: color 0.15s, background 0.15s;
-  flex-shrink: 0; line-height: 1;
-}
-.delete-btn:hover { color: #ef4444; background: #fef2f2; }
+        /* ── Task card ── */
+        .tk-card {
+          background: white;
+          border-radius: 16px;
+          padding: 16px 18px;
+          border: 1.5px solid #f0f2f8;
+          border-left: 4px solid transparent;
+          display: flex;
+          align-items: flex-start;
+          gap: 14px;
+          transition: box-shadow 0.2s, transform 0.18s;
+        }
+        .tk-card:hover {
+          box-shadow: 0 8px 28px rgba(15,23,42,0.09);
+          transform: translateY(-2px);
+        }
+        .tk-card.done-card { opacity: 0.52; background: #fafbfd; }
 
-.filter-chip {
-  padding: 7px 16px; border-radius: 999px;
-  font-size: 13px; font-weight: 600;
-  border: 1.5px solid #e2e8f0;
-  background: white; cursor: pointer;
-  transition: all 0.15s;
-  font-family: 'DM Sans', sans-serif;
-}
-.filter-chip:hover { border-color: #2563eb; color: #2563eb; }
-.filter-chip.active {
-  background: #2563eb; color: white; border-color: #2563eb;
-  box-shadow: 0 4px 12px rgba(37,99,235,0.25);
-}
+        /* ── Checkbox ── */
+        .tk-chk {
+          width: 22px; height: 22px; border-radius: 7px;
+          border: 2px solid #d1d9e6; background: white;
+          cursor: pointer; display: flex; align-items: center; justify-content: center;
+          font-size: 12px; flex-shrink: 0; margin-top: 2px;
+          transition: all 0.15s;
+        }
+        .tk-chk:hover { border-color: #6366f1; transform: scale(1.1); }
+        .tk-chk.checked { background: #6366f1; border-color: #6366f1; color: white; }
 
-.toast {
-  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-  background: #0f172a; color: white;
-  padding: 12px 22px; border-radius: 999px;
-  font-size: 14px; font-weight: 600;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-  z-index: 9999; white-space: nowrap;
-  animation: fadeInUp 0.25s ease;
-}
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(-6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.task-entry { animation: slideIn 0.2s ease both; }
+        /* ── Delete ── */
+        .tk-del {
+          background: none; border: none; cursor: pointer;
+          color: #d1d9e6; font-size: 15px; padding: 3px 6px;
+          border-radius: 6px; line-height: 1; flex-shrink: 0;
+          transition: color 0.15s, background 0.15s;
+        }
+        .tk-del:hover { color: #ef4444; background: #fef2f2; }
+
+        /* ── Filter chips ── */
+        .tk-chip {
+          padding: 7px 16px; border-radius: 999px;
+          font-size: 13px; font-weight: 600;
+          border: 1.5px solid #e8eaf2; background: white;
+          cursor: pointer; font-family: 'DM Sans', sans-serif;
+          transition: all 0.15s;
+        }
+        .tk-chip:hover { border-color: #6366f1; color: #6366f1; }
+        .tk-chip.on {
+          background: #6366f1; color: white; border-color: #6366f1;
+          box-shadow: 0 4px 12px rgba(99,102,241,0.28);
+        }
+
+        /* ── Toast ── */
+        .tk-toast {
+          position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+          background: #0f172a; color: white;
+          padding: 12px 24px; border-radius: 999px;
+          font-size: 13px; font-weight: 700;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.20);
+          z-index: 9999; white-space: nowrap;
+          animation: toastUp 0.28s cubic-bezier(0.22,1,0.36,1);
+          font-family: 'DM Sans', sans-serif;
+        }
+        @keyframes toastUp {
+          from { opacity:0; transform: translateX(-50%) translateY(14px); }
+          to   { opacity:1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* ── Slide in ── */
+        @keyframes slideDown {
+          from { opacity:0; transform: translateY(-10px); }
+          to   { opacity:1; transform: translateY(0); }
+        }
+        .tk-entry { animation: slideDown 0.22s ease both; }
+
+        /* ── Progress bar ── */
+        .tk-prog-fill { transition: width 0.5s cubic-bezier(0.22,1,0.36,1); }
+
+        /* ── Mobile ── */
+        @media(max-width:620px) {
+          .tk-form-row { grid-template-columns: 1fr !important; }
+          .tk-filters  { flex-direction: column !important; }
+          .tk-header   { flex-direction: column !important; }
+        }
       `}</style>
 
-      {successMsg && <div className="toast">{successMsg}</div>}
+      {successMsg && <div className="tk-toast">{successMsg}</div>}
 
-      <div style={container}>
+      <div style={{ maxWidth: 820, margin: "0 auto" }}>
 
-        {/* Header */}
-        <div style={headerRow}>
+        {/* ── Header ── */}
+        <div className="tk-header" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:16, marginBottom:28, flexWrap:"wrap" }}>
           <div>
-            <h1 style={titleStyle}>Tasks Manager</h1>
-            <p style={subtitleStyle}>Track your assignments, exams, and deadlines.</p>
+            <h1 style={{ fontFamily:"'Instrument Serif', Georgia, serif", fontSize:36, fontWeight:400, color:"#0f172a", margin:"0 0 4px", letterSpacing:"-0.3px" }}>
+              Task Manager
+            </h1>
+            <p style={{ fontFamily:"'DM Sans',sans-serif", color:"#94a3b8", fontSize:14, margin:0 }}>
+              Track assignments, deadlines, and exam prep.
+            </p>
           </div>
-          <div style={statsRow}>
-            <div style={statPill}>
-              <span style={{ color: "#2563eb", fontWeight: "700" }}>{counts.active}</span>
-              <span style={{ color: "#64748b", fontSize: "12px", marginLeft: "4px" }}>active</span>
-            </div>
-            <div style={statPill}>
-              <span style={{ color: "#22c55e", fontWeight: "700" }}>{counts.done}</span>
-              <span style={{ color: "#64748b", fontSize: "12px", marginLeft: "4px" }}>done</span>
-            </div>
+
+          {/* Stats */}
+          <div style={{ display:"flex", gap:10 }}>
+            {[
+              { n: counts.active, label:"active",    c:"#6366f1", bg:"#eef2ff" },
+              { n: counts.done,   label:"completed", c:"#10b981", bg:"#f0fdf4" },
+            ].map(s => (
+              <div key={s.label} style={{ background:s.bg, border:`1.5px solid ${s.c}22`, borderRadius:14, padding:"12px 18px", textAlign:"center", minWidth:80 }}>
+                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:26, fontWeight:700, color:s.c, lineHeight:1 }}>{s.n}</div>
+                <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:11, color:"#94a3b8", marginTop:3, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em" }}>{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Add Task Form */}
-        <div style={formCard}>
-          <div style={formGrid}>
+        {/* ── Progress bar (only if tasks exist) ── */}
+        {counts.all > 0 && (
+          <div style={{ background:"white", borderRadius:16, padding:"16px 20px", marginBottom:18, border:"1.5px solid #f0f2f8", boxShadow:"0 2px 8px rgba(15,23,42,0.05)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <span style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, fontWeight:700, color:"#475569" }}>Overall Progress</span>
+              <span style={{ fontFamily:"'DM Mono',monospace", fontSize:13, fontWeight:700, color:"#6366f1" }}>{donePercent}%</span>
+            </div>
+            <div style={{ height:8, background:"#f0f2f8", borderRadius:999, overflow:"hidden" }}>
+              <div className="tk-prog-fill" style={{ height:"100%", borderRadius:999, width:`${donePercent}%`, background:"linear-gradient(90deg,#6366f1,#8b5cf6)" }} />
+            </div>
+          </div>
+        )}
+
+        {/* ── Add Form ── */}
+        <div style={{ background:"white", borderRadius:20, padding:"20px 22px", border:"1.5px solid #f0f2f8", boxShadow:"0 4px 20px rgba(15,23,42,0.07)", marginBottom:18 }}>
+          <div className="tk-form-row" style={{ display:"grid", gridTemplateColumns:"1fr auto auto", gap:10, marginBottom:12 }}>
             <input
-              className="task-input"
+              className="tk-inp"
               type="text"
-              placeholder="Add a new task... (Press Enter)"
-              style={inputStyle}
+              placeholder="What needs to be done? (Press Enter)"
+              style={{ ...inp, flex:1 }}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={handleKeyDown}
             />
-
-            <select
-              className="task-select"
-              style={inputStyle}
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-            >
+            <select className="tk-sel" style={{ ...inp, paddingRight:10, minWidth:130 }} value={priority} onChange={(e) => setPriority(e.target.value)}>
               {PRIORITIES.map((p) => (
-                <option key={p} value={p}>
-                  {priorityConfig[p].icon} {p} Priority
-                </option>
+                <option key={p} value={p}>{priorityConfig[p].icon} {p}</option>
               ))}
             </select>
-
-            <input
-              className="task-input"
-              type="date"
-              style={inputStyle}
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
+            <input className="tk-inp" type="date" style={{ ...inp, minWidth:140 }} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
-
           <button
-            className="add-btn"
+            className="tk-add-btn"
             onClick={addTask}
             disabled={title.trim() === ""}
             style={{
-              ...addBtnStyle,
-              opacity: title.trim() === "" ? 0.5 : 1,
+              padding:"12px 26px", borderRadius:11, border:"none",
+              background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+              color:"white", fontWeight:700, fontSize:14,
+              fontFamily:"'DM Sans',sans-serif",
+              boxShadow:"0 4px 14px rgba(99,102,241,0.30)",
               cursor: title.trim() === "" ? "not-allowed" : "pointer",
             }}
           >
@@ -255,37 +266,22 @@ function TasksPage() {
           </button>
         </div>
 
-        {/* Filters */}
-        <div style={filtersRow}>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {["All", "Active", "Done"].map((f) => (
-              <button
-                key={f}
-                className={`filter-chip ${filter === f ? "active" : ""}`}
-                onClick={() => setFilter(f)}
-              >
-                {f}
-                {f === "All" && ` (${counts.all})`}
-                {f === "Active" && ` (${counts.active})`}
-                {f === "Done" && ` (${counts.done})`}
+        {/* ── Filters ── */}
+        <div className="tk-filters" style={{ display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:10, marginBottom:20 }}>
+          <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
+            {["All","Active","Done"].map((f) => (
+              <button key={f} className={`tk-chip${filter===f?" on":""}`} onClick={() => setFilter(f)}>
+                {f}{f==="All"?` (${counts.all})`:f==="Active"?` (${counts.active})`:`(${counts.done})`}
               </button>
             ))}
           </div>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {["All", ...PRIORITIES].map((p) => {
+          <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
+            {["All",...PRIORITIES].map((p) => {
               const cfg = priorityConfig[p];
-              const isActive = priorityFilter === p;
+              const on  = priorityFilter === p;
               return (
-                <button
-                  key={p}
-                  className="filter-chip"
-                  onClick={() => setPriorityFilter(p)}
-                  style={{
-                    background: isActive && cfg ? cfg.bg : undefined,
-                    color: isActive && cfg ? cfg.color : undefined,
-                    borderColor: isActive && cfg ? cfg.color : undefined,
-                  }}
-                >
+                <button key={p} className="tk-chip" onClick={() => setPriorityFilter(p)}
+                  style={{ background:on&&cfg?cfg.bg:undefined, color:on&&cfg?cfg.color:undefined, borderColor:on&&cfg?cfg.color:undefined }}>
                   {cfg ? cfg.icon : "🔘"} {p}
                 </button>
               );
@@ -293,100 +289,89 @@ function TasksPage() {
           </div>
         </div>
 
-        {/* Task list */}
+        {/* ── Task List ── */}
         {filteredTasks.length === 0 ? (
-          <div style={emptyState}>
-            <div style={{ fontSize: "44px", marginBottom: "12px" }}>
-              {tasks.length === 0 ? "📋" : "✅"}
-            </div>
-            <p style={{ fontWeight: "700", fontSize: "18px", color: "#0f172a", margin: "0 0 6px" }}>
-              {tasks.length === 0 ? "No tasks yet" : "No tasks match this filter"}
+          <div style={{ textAlign:"center", padding:"60px 20px", background:"white", borderRadius:20, border:"1.5px dashed #e8eaf2" }}>
+            <div style={{ fontSize:52, marginBottom:14 }}>{tasks.length === 0 ? "📋" : "✅"}</div>
+            <p style={{ fontFamily:"'DM Sans',sans-serif", fontWeight:800, fontSize:18, color:"#0f172a", margin:"0 0 8px" }}>
+              {tasks.length === 0 ? "No tasks yet" : "Nothing here"}
             </p>
-            <p style={{ color: "#64748b", margin: 0 }}>
-              {tasks.length === 0 ? "Add your first task above." : "Try switching the filter."}
+            <p style={{ fontFamily:"'DM Sans',sans-serif", color:"#94a3b8", fontSize:14, margin:0 }}>
+              {tasks.length === 0 ? "Add your first task above." : "Try switching filters."}
             </p>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {filteredTasks.map((task) => {
-              const cfg = priorityConfig[task.priority] || priorityConfig["Medium"];
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {filteredTasks.map((task, i) => {
+              const cfg     = priorityConfig[task.priority] || priorityConfig["Medium"];
               const overdue = !task.completed && isOverdue(task.dueDate);
               return (
-                <div key={task.id} className={`task-card task-entry${task.completed ? " completed" : ""}`} style={{ borderLeftColor: task.completed ? "#e2e8f0" : cfg.color }}>
-
+                <div
+                  key={task.id}
+                  className={`tk-card tk-entry${task.completed ? " done-card" : ""}`}
+                  style={{ borderLeftColor: task.completed ? "#e8eaf2" : cfg.accent, animationDelay:`${i*0.04}s` }}
+                >
                   {/* Checkbox */}
-                  <button
-                    className={`check-btn${task.completed ? " done" : ""}`}
-                    onClick={() => toggleComplete(task.id)}
-                    title={task.completed ? "Mark as active" : "Mark as done"}
-                  >
+                  <button className={`tk-chk${task.completed ? " checked" : ""}`} onClick={() => toggleComplete(task.id)}>
                     {task.completed && "✓"}
                   </button>
 
                   {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
                     <div style={{
-                      fontWeight: "600",
-                      fontSize: "15px",
+                      fontFamily:"'DM Sans',sans-serif", fontWeight:600, fontSize:15,
                       color: task.completed ? "#94a3b8" : "#0f172a",
                       textDecoration: task.completed ? "line-through" : "none",
-                      marginBottom: "6px",
-                      wordBreak: "break-word",
+                      marginBottom:8, wordBreak:"break-word",
                     }}>
                       {task.title}
                     </div>
-
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
-                      {/* Priority badge */}
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+                      {/* Priority */}
                       <span style={{
-                        padding: "3px 10px",
-                        borderRadius: "999px",
-                        fontSize: "12px",
-                        fontWeight: "700",
-                        background: cfg.bg,
-                        color: cfg.color,
-                        border: `1px solid ${cfg.border}`,
+                        padding:"3px 11px", borderRadius:999, fontSize:12, fontWeight:700,
+                        background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`,
+                        fontFamily:"'DM Sans',sans-serif",
+                        display:"flex", alignItems:"center", gap:4,
                       }}>
-                        {cfg.icon} {task.priority}
+                        <span style={{ width:6, height:6, borderRadius:"50%", background:cfg.color, display:"inline-block" }}/>
+                        {task.priority}
                       </span>
-
                       {/* Due date */}
                       {task.dueDate && (
                         <span style={{
-                          fontSize: "12px",
-                          fontWeight: "600",
-                          color: overdue ? "#dc2626" : "#64748b",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
+                          fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:600,
+                          color: overdue ? "#ef4444" : "#94a3b8",
+                          display:"flex", alignItems:"center", gap:4,
+                          background: overdue ? "#fef2f2" : "#f8fafc",
+                          padding:"3px 10px", borderRadius:999,
+                          border:`1px solid ${overdue?"#fecaca":"#e8eaf2"}`,
                         }}>
-                          {overdue ? "⚠️" : "📅"} {formatDate(task.dueDate)}
-                          {overdue && " — Overdue"}
+                          {overdue ? "⚠" : "📅"} {formatDate(task.dueDate)}{overdue && " · Overdue"}
                         </span>
                       )}
                     </div>
                   </div>
 
                   {/* Delete */}
-                  <button
-                    className="delete-btn"
-                    onClick={() => deleteTask(task.id)}
-                    title="Delete task"
-                  >
-                    ✕
-                  </button>
+                  <button className="tk-del" onClick={() => deleteTask(task.id)}>✕</button>
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Clear done tasks */}
+        {/* ── Clear Done ── */}
         {counts.done > 0 && (
-          <div style={{ marginTop: "20px", textAlign: "right" }}>
+          <div style={{ marginTop:20, textAlign:"right" }}>
             <button
               onClick={() => { saveTasks(tasks.filter(t => !t.completed)); showSuccess("Completed tasks cleared!"); }}
-              style={clearDoneBtn}
+              style={{
+                background:"none", border:"1.5px solid #fecaca", color:"#ef4444",
+                padding:"9px 18px", borderRadius:10, fontSize:13, fontWeight:600,
+                cursor:"pointer", fontFamily:"'DM Sans',sans-serif",
+                transition:"background 0.15s",
+              }}
             >
               🗑 Clear {counts.done} completed {counts.done === 1 ? "task" : "tasks"}
             </button>
@@ -398,91 +383,19 @@ function TasksPage() {
 }
 
 const pageStyle = {
-  padding: "24px 20px 48px",
-  boxSizing: "border-box",
+  padding: "28px 20px 52px",
   fontFamily: "'DM Sans', sans-serif",
   minHeight: "100vh",
-  background: "#f8fafc",
+  background: "#f5f6fa",
 };
 
-const container = { maxWidth: "800px", margin: "0 auto" };
-
-const headerRow = {
-  display: "flex", justifyContent: "space-between",
-  alignItems: "flex-start", flexWrap: "wrap",
-  gap: "16px", marginBottom: "22px",
-};
-
-const titleStyle = {
-  fontSize: "32px", fontWeight: "800",
-  color: "#0f172a", margin: "0 0 4px",
-  letterSpacing: "-0.6px",
-};
-
-const subtitleStyle = { color: "#64748b", fontSize: "15px", margin: 0 };
-
-const statsRow = { display: "flex", gap: "10px", alignItems: "center" };
-
-const statPill = {
-  background: "white", border: "1.5px solid #e2e8f0",
-  borderRadius: "10px", padding: "10px 14px",
-  display: "flex", alignItems: "baseline",
-  boxShadow: "0 2px 6px rgba(15,23,42,0.05)",
-  fontFamily: "'DM Mono', monospace",
-  fontSize: "18px",
-};
-
-const formCard = {
-  background: "white", borderRadius: "18px",
-  padding: "20px", border: "1.5px solid #e2e8f0",
-  boxShadow: "0 4px 16px rgba(15,23,42,0.07)",
-  marginBottom: "18px",
-};
-
-const formGrid = {
-  display: "grid",
-  gridTemplateColumns: "1fr auto auto",
-  gap: "10px", marginBottom: "12px",
-};
-
-/* note: mobile handled via media query in CSS */
-
-const inputStyle = {
-  padding: "11px 14px", borderRadius: "10px",
-  border: "1.5px solid #e2e8f0", fontSize: "14px",
-  background: "#f8fafc", color: "#0f172a",
+const inp = {
+  padding: "12px 14px", borderRadius: 11,
+  border: "1.5px solid #e8eaf2", fontSize: 14,
+  background: "#fafbfd", color: "#0f172a",
   fontFamily: "'DM Sans', sans-serif",
-  transition: "border-color 0.15s, box-shadow 0.15s",
   width: "100%", boxSizing: "border-box",
-};
-
-const addBtnStyle = {
-  padding: "11px 22px", borderRadius: "10px",
-  border: "none", background: "#2563eb", color: "white",
-  fontWeight: "700", fontSize: "14px",
-  fontFamily: "'DM Sans', sans-serif",
-  transition: "filter 0.15s, transform 0.1s",
-  boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
-};
-
-const filtersRow = {
-  display: "flex", justifyContent: "space-between",
-  flexWrap: "wrap", gap: "10px", marginBottom: "16px",
-};
-
-const emptyState = {
-  textAlign: "center", padding: "50px 20px",
-  background: "white", borderRadius: "16px",
-  border: "1.5px solid #e2e8f0",
-};
-
-const clearDoneBtn = {
-  background: "none", border: "1.5px solid #fecaca",
-  color: "#dc2626", padding: "9px 16px",
-  borderRadius: "10px", fontSize: "13px",
-  fontWeight: "600", cursor: "pointer",
-  fontFamily: "'DM Sans', sans-serif",
-  transition: "background 0.15s",
+  transition: "border-color 0.15s, box-shadow 0.15s, background 0.15s",
 };
 
 export default TasksPage;
