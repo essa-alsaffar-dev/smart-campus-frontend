@@ -339,26 +339,21 @@ export default function SchedulePage() {
 
               <div style={{ ...formGroup, gridColumn: "1 / -1" }}>
                 <label style={formLabel}>Room</label>
-                <select
+                <input
                   className="form-input"
                   style={formInput}
+                  type="text"
+                  placeholder="e.g. G101, Lab 3, Building A"
                   value={room}
                   onChange={(e) => setRoom(e.target.value)}
-                >
-                  <option value="">Select a room</option>
-                  {rooms.length > 0 ? (
-                    rooms.map((r, i) => {
-                      const name = r.name || r.roomName || r;
-                      return (
-                        <option key={i} value={name}>
-                          {name}
-                        </option>
-                      );
-                    })
-                  ) : (
-                    <option disabled>No rooms — add from Classrooms page</option>
-                  )}
-                </select>
+                  list="rooms-suggestions"
+                />
+                <datalist id="rooms-suggestions">
+                  {rooms.map((r, i) => {
+                    const name = r.name || r.roomName || r;
+                    return <option key={i} value={name} />;
+                  })}
+                </datalist>
               </div>
             </div>
 
