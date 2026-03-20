@@ -37,14 +37,32 @@ const getUserKey = () => {
 
 const getScheduleStorageKey = () => `schedule_${getUserKey()}`;
 
-const mapEntry = (e) => ({
-  id: e.id,
-  courseName: e.courseName,
-  day: e.dayOfWeek || e.day,
-  time: e.time || `${e.startTime || ""} - ${e.endTime || ""}`,
-  room: e.room || e.classroom?.name || "",
-  color: e.color,
-});
+const colorIndexFromString = (colorStr) => {
+  if (colorStr === null || colorStr === undefined) return null;
+  const n = parseInt(colorStr, 10);
+  if (!isNaN(n) && n >= 0 && n < COURSE_COLORS.length) return n;
+  return null;
+};
+
+const mapEntry = (e) => {
+  // Normalize time: always produce "HH:MM - HH:MM" with spaces around dash
+  let time = "";
+  if (e.startTime && e.endTime) {
+    time = `${e.startTime.trim()} - ${e.endTime.trim()}`;
+  } else if (e.time) {
+    // Normalize whatever format comes in to have spaces around dash
+    time = e.time.replace(/\s*-\s*/, " - ").trim();
+  }
+
+  return {
+    id: e.id,
+    courseName: e.courseName,
+    day: e.dayOfWeek || e.day,
+    time,
+    room: e.room || e.classroom?.name || "",
+    colorIndex: colorIndexFromString(e.color),
+  };
+};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
@@ -145,7 +163,12 @@ export default function SchedulePage() {
     entries.forEach((e) => {
       if (!colorMap[e.courseName]) {
         const idx = Object.keys(colorMap).length % COURSE_COLORS.length;
-        colorMap[e.courseName] = e.color || COURSE_COLORS[idx];
+        // colorIndex is a number saved as string on backend; fall back to sequential index
+        const resolvedIdx =
+          e.colorIndex !== null && e.colorIndex !== undefined
+            ? e.colorIndex % COURSE_COLORS.length
+            : idx;
+        colorMap[e.courseName] = COURSE_COLORS[resolvedIdx];
       }
     });
     return colorMap;
@@ -172,7 +195,15 @@ export default function SchedulePage() {
       } catch (err) {
         console.log("GET /schedule failed:", err?.response?.status, err?.response?.data);
 
-        const saved = JSON.parse(localStorage.getItem(getScheduleStorageKey()) || "[]");
+        const raw = JSON.parse(localStorage.getItem(getScheduleStorageKey()) || "[]");
+        // Migrate old entries that stored color as object instead of colorIndex
+        const saved = raw.map((e) => {
+          if (e.colorIndex === undefined && e.color !== undefined) {
+            const idx = colorIndexFromString(e.color);
+            return { ...e, colorIndex: idx };
+          }
+          return e;
+        });
         setSchedule(saved);
         setCourseColorMap(buildColorMap(saved));
 
@@ -193,11 +224,14 @@ export default function SchedulePage() {
   };
 
   const assignColor = (name) => {
-    if (courseColorMap[name]) return courseColorMap[name];
+    if (courseColorMap[name]) {
+      const idx = COURSE_COLORS.indexOf(courseColorMap[name]);
+      return { colorObj: courseColorMap[name], colorIndex: idx >= 0 ? idx : 0 };
+    }
     const idx = Object.keys(courseColorMap).length % COURSE_COLORS.length;
-    const color = COURSE_COLORS[idx];
-    setCourseColorMap((prev) => ({ ...prev, [name]: color }));
-    return color;
+    const colorObj = COURSE_COLORS[idx];
+    setCourseColorMap((prev) => ({ ...prev, [name]: colorObj }));
+    return { colorObj, colorIndex: idx };
   };
 
   const resolveRoomPayload = () => {
@@ -249,7 +283,7 @@ export default function SchedulePage() {
       return;
     }
 
-    const color = assignColor(courseName.trim());
+    const { colorObj, colorIndex } = assignColor(courseName.trim());
     const { roomName, classroomId } = resolveRoomPayload();
 
     const payload = {
@@ -258,7 +292,7 @@ export default function SchedulePage() {
       startTime,
       endTime,
       room: roomName,
-      color,
+      color: String(colorIndex),
     };
 
     if (classroomId !== null && classroomId !== undefined) {
@@ -273,9 +307,18 @@ export default function SchedulePage() {
         headers: getH(),
       });
 
-      const newEntry = mapEntry(res.data);
-      const updated = [...schedule, newEntry];
-      saveSchedule(updated);
+      // Re-fetch full schedule from server to ensure sync
+      try {
+        const refreshed = await axios.get(`${API}/schedule`, { headers: getH() });
+        const entries = Array.isArray(refreshed.data) ? refreshed.data.map(mapEntry) : [];
+        saveSchedule(entries);
+        setCourseColorMap(buildColorMap(entries));
+      } catch {
+        // If re-fetch fails, optimistically add the new entry
+        const newEntry = mapEntry(res.data);
+        const updated = [...schedule, newEntry];
+        saveSchedule(updated);
+      }
       showToast("✅ Class added!");
 
       setCourseName("");
@@ -300,8 +343,16 @@ export default function SchedulePage() {
         headers: getH(),
       });
 
-      const updated = schedule.filter((s) => s.id !== id);
-      saveSchedule(updated);
+      // Re-fetch to ensure sync after delete
+      try {
+        const refreshed = await axios.get(`${API}/schedule`, { headers: getH() });
+        const entries = Array.isArray(refreshed.data) ? refreshed.data.map(mapEntry) : [];
+        saveSchedule(entries);
+        setCourseColorMap(buildColorMap(entries));
+      } catch {
+        const updated = schedule.filter((s) => s.id !== id);
+        saveSchedule(updated);
+      }
       showToast("🗑 Class removed");
     } catch (err) {
       console.log("DELETE /schedule failed:", err?.response?.status, err?.response?.data);
