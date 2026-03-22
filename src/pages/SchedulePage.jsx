@@ -1,40 +1,8 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api/api";
 
-const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
-
-const getToken = () => {
-  return (
-    localStorage.getItem("token") ||
-    localStorage.getItem("authToken") ||
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("jwt") ||
-    ""
-  );
-};
-
-const getH = () => {
-  const t = getToken();
-  return t
-    ? {
-        Authorization: `Bearer ${t}`,
-        "Content-Type": "application/json",
-      }
-    : {
-        "Content-Type": "application/json",
-      };
-};
-
-const getUserKey = () => {
-  return (
-    localStorage.getItem("userEmail") ||
-    localStorage.getItem("userName") ||
-    "guest"
-  )
-    .toLowerCase()
-    .trim();
-};
-
+const getToken = () => localStorage.getItem("token") || localStorage.getItem("authToken") || localStorage.getItem("accessToken") || localStorage.getItem("jwt") || "";
+const getUserKey = () => (localStorage.getItem("userEmail") || localStorage.getItem("userName") || "guest").toLowerCase().trim();
 const getScheduleStorageKey = () => `schedule_${getUserKey()}`;
 
 const colorIndexFromString = (colorStr) => {
@@ -45,15 +13,12 @@ const colorIndexFromString = (colorStr) => {
 };
 
 const mapEntry = (e) => {
-  // Normalize time: always produce "HH:MM - HH:MM" with spaces around dash
   let time = "";
   if (e.startTime && e.endTime) {
     time = `${e.startTime.trim()} - ${e.endTime.trim()}`;
   } else if (e.time) {
-    // Normalize whatever format comes in to have spaces around dash
     time = e.time.replace(/\s*-\s*/, " - ").trim();
   }
-
   return {
     id: e.id,
     courseName: e.courseName,
@@ -64,17 +29,8 @@ const mapEntry = (e) => {
   };
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
-
-const DAY_SHORT = {
-  Sunday: "Sun",
-  Monday: "Mon",
-  Tuesday: "Tue",
-  Wednesday: "Wed",
-  Thursday: "Thu",
-};
-
+const DAY_SHORT = { Sunday: "Sun", Monday: "Mon", Tuesday: "Tue", Wednesday: "Wed", Thursday: "Thu" };
 const COURSE_COLORS = [
   { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8", accent: "#2563eb" },
   { bg: "#f0fdf4", border: "#bbf7d0", text: "#15803d", accent: "#16a34a" },
@@ -88,8 +44,7 @@ const COURSE_COLORS = [
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr) return 0;
-  const clean = timeStr.trim();
-  const [h, m] = clean.split(":").map(Number);
+  const [h, m] = timeStr.trim().split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
 };
 
@@ -107,9 +62,7 @@ const getDuration = (timeRange) => {
   if (!timeRange) return null;
   const parts = timeRange.split("-").map((t) => t.trim());
   if (parts.length < 2) return null;
-  const start = parseTimeToMinutes(parts[0]);
-  const end = parseTimeToMinutes(parts[1]);
-  const diff = end - start;
+  const diff = parseTimeToMinutes(parts[1]) - parseTimeToMinutes(parts[0]);
   if (diff <= 0) return null;
   const h = Math.floor(diff / 60);
   const m = diff % 60;
@@ -120,16 +73,11 @@ const getDuration = (timeRange) => {
 
 const getCurrentDayIndex = () => {
   const jsDay = new Date().getDay();
-  const idx = DAYS.indexOf(
-    ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][jsDay]
-  );
+  const idx = DAYS.indexOf(["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][jsDay]);
   return idx >= 0 ? idx : 0;
 };
 
-const getCurrentMinutes = () => {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
-};
+const getCurrentMinutes = () => new Date().getHours() * 60 + new Date().getMinutes();
 
 const generateTimeOptions = () => {
   const options = [];
@@ -143,19 +91,18 @@ const generateTimeOptions = () => {
 
 const TIME_OPTIONS = generateTimeOptions();
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function SchedulePage() {
   const [courseName, setCourseName] = useState("");
-  const [day, setDay] = useState("Sunday");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [room, setRoom] = useState("");
-  const [schedule, setSchedule] = useState([]);
-  const [rooms, setRooms] = useState([]);
-  const [activeDay, setActiveDay] = useState(DAYS[getCurrentDayIndex()]);
-  const [viewMode, setViewMode] = useState("week");
-  const [showForm, setShowForm] = useState(false);
-  const [toast, setToast] = useState("");
+  const [day, setDay]               = useState("Sunday");
+  const [startTime, setStartTime]   = useState("");
+  const [endTime, setEndTime]       = useState("");
+  const [room, setRoom]             = useState("");
+  const [schedule, setSchedule]     = useState([]);
+  const [rooms, setRooms]           = useState([]);
+  const [activeDay, setActiveDay]   = useState(DAYS[getCurrentDayIndex()]);
+  const [viewMode, setViewMode]     = useState("week");
+  const [showForm, setShowForm]     = useState(false);
+  const [toast, setToast]           = useState("");
   const [courseColorMap, setCourseColorMap] = useState({});
 
   const buildColorMap = (entries) => {
@@ -163,11 +110,7 @@ export default function SchedulePage() {
     entries.forEach((e) => {
       if (!colorMap[e.courseName]) {
         const idx = Object.keys(colorMap).length % COURSE_COLORS.length;
-        // colorIndex is a number saved as string on backend; fall back to sequential index
-        const resolvedIdx =
-          e.colorIndex !== null && e.colorIndex !== undefined
-            ? e.colorIndex % COURSE_COLORS.length
-            : idx;
+        const resolvedIdx = e.colorIndex !== null && e.colorIndex !== undefined ? e.colorIndex % COURSE_COLORS.length : idx;
         colorMap[e.courseName] = COURSE_COLORS[resolvedIdx];
       }
     });
@@ -182,39 +125,26 @@ export default function SchedulePage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const token = getToken();
-        console.log("Schedule load token exists:", !!token);
-
-        const res = await axios.get(`${API}/schedule`, {
-          headers: getH(),
-        });
-
+        const res = await api.get("/schedule");
         const entries = Array.isArray(res.data) ? res.data.map(mapEntry) : [];
         saveSchedule(entries);
         setCourseColorMap(buildColorMap(entries));
       } catch (err) {
-        console.log("GET /schedule failed:", err?.response?.status, err?.response?.data);
-
         const raw = JSON.parse(localStorage.getItem(getScheduleStorageKey()) || "[]");
-        // Migrate old entries that stored color as object instead of colorIndex
         const saved = raw.map((e) => {
           if (e.colorIndex === undefined && e.color !== undefined) {
-            const idx = colorIndexFromString(e.color);
-            return { ...e, colorIndex: idx };
+            return { ...e, colorIndex: colorIndexFromString(e.color) };
           }
           return e;
         });
         setSchedule(saved);
         setCourseColorMap(buildColorMap(saved));
-
         if (err?.response?.status === 401 || err?.response?.status === 403) {
-          showToast("⚠️ Session expired or unauthorized. Please login again.");
+          showToast("⚠️ Session expired. Please login again.");
         }
       }
-
       setRooms(JSON.parse(localStorage.getItem("classrooms") || "[]"));
     };
-
     load();
   }, []);
 
@@ -236,34 +166,13 @@ export default function SchedulePage() {
 
   const resolveRoomPayload = () => {
     if (room && typeof room === "object") {
-      return {
-        roomName: String(room.name || room.roomName || room.label || "").trim(),
-        classroomId: room.id ?? room.classroomId ?? null,
-      };
+      return { roomName: String(room.name || room.roomName || room.label || "").trim(), classroomId: room.id ?? room.classroomId ?? null };
     }
-
     const typed = String(room || "").trim();
-    if (!typed) {
-      return { roomName: "", classroomId: null };
-    }
-
-    const matched =
-      rooms.find((r) => {
-        const name = String(r?.name || r?.roomName || r || "").trim().toLowerCase();
-        return name === typed.toLowerCase();
-      }) || null;
-
-    if (matched) {
-      return {
-        roomName: String(matched.name || matched.roomName || typed).trim(),
-        classroomId: matched.id ?? matched.classroomId ?? null,
-      };
-    }
-
-    return {
-      roomName: typed,
-      classroomId: null,
-    };
+    if (!typed) return { roomName: "", classroomId: null };
+    const matched = rooms.find((r) => String(r?.name || r?.roomName || r || "").trim().toLowerCase() === typed.toLowerCase()) || null;
+    if (matched) return { roomName: String(matched.name || matched.roomName || typed).trim(), classroomId: matched.id ?? matched.classroomId ?? null };
+    return { roomName: typed, classroomId: null };
   };
 
   const addSchedule = async () => {
@@ -271,64 +180,34 @@ export default function SchedulePage() {
       showToast("⚠️ Please fill in all fields");
       return;
     }
-
     if (parseTimeToMinutes(endTime) <= parseTimeToMinutes(startTime)) {
       showToast("⚠️ End time must be after start time");
       return;
     }
-
-    const token = getToken();
-    if (!token) {
+    if (!getToken()) {
       showToast("⚠️ No token found. Please login again.");
       return;
     }
 
-    const { colorObj, colorIndex } = assignColor(courseName.trim());
+    const { colorIndex } = assignColor(courseName.trim());
     const { roomName, classroomId } = resolveRoomPayload();
-
-    const payload = {
-      courseName: courseName.trim(),
-      dayOfWeek: day,
-      startTime,
-      endTime,
-      room: roomName,
-      color: String(colorIndex),
-    };
-
-    if (classroomId !== null && classroomId !== undefined) {
-      payload.classroomId = classroomId;
-    }
+    const payload = { courseName: courseName.trim(), dayOfWeek: day, startTime, endTime, room: roomName, color: String(colorIndex) };
+    if (classroomId !== null && classroomId !== undefined) payload.classroomId = classroomId;
 
     try {
-      console.log("POST /schedule payload:", payload);
-      console.log("POST /schedule token exists:", !!token);
-
-      const res = await axios.post(`${API}/schedule`, payload, {
-        headers: getH(),
-      });
-
-      // Re-fetch full schedule from server to ensure sync
+      const res = await api.post("/schedule", payload);
       try {
-        const refreshed = await axios.get(`${API}/schedule`, { headers: getH() });
+        const refreshed = await api.get("/schedule");
         const entries = Array.isArray(refreshed.data) ? refreshed.data.map(mapEntry) : [];
         saveSchedule(entries);
         setCourseColorMap(buildColorMap(entries));
       } catch {
-        // If re-fetch fails, optimistically add the new entry
         const newEntry = mapEntry(res.data);
-        const updated = [...schedule, newEntry];
-        saveSchedule(updated);
+        saveSchedule([...schedule, newEntry]);
       }
       showToast("✅ Class added!");
-
-      setCourseName("");
-      setStartTime("");
-      setEndTime("");
-      setRoom("");
-      setShowForm(false);
+      setCourseName(""); setStartTime(""); setEndTime(""); setRoom(""); setShowForm(false);
     } catch (err) {
-      console.log("POST /schedule failed:", err?.response?.status, err?.response?.data);
-
       if (err?.response?.status === 401 || err?.response?.status === 403) {
         showToast("⚠️ Unauthorized. Please login again.");
       } else {
@@ -339,24 +218,17 @@ export default function SchedulePage() {
 
   const deleteSchedule = async (id) => {
     try {
-      await axios.delete(`${API}/schedule/${id}`, {
-        headers: getH(),
-      });
-
-      // Re-fetch to ensure sync after delete
+      await api.delete(`/schedule/${id}`);
       try {
-        const refreshed = await axios.get(`${API}/schedule`, { headers: getH() });
+        const refreshed = await api.get("/schedule");
         const entries = Array.isArray(refreshed.data) ? refreshed.data.map(mapEntry) : [];
         saveSchedule(entries);
         setCourseColorMap(buildColorMap(entries));
       } catch {
-        const updated = schedule.filter((s) => s.id !== id);
-        saveSchedule(updated);
+        saveSchedule(schedule.filter((s) => s.id !== id));
       }
       showToast("🗑 Class removed");
     } catch (err) {
-      console.log("DELETE /schedule failed:", err?.response?.status, err?.response?.data);
-
       if (err?.response?.status === 401 || err?.response?.status === 403) {
         showToast("⚠️ Unauthorized. Please login again.");
       } else {
@@ -366,21 +238,12 @@ export default function SchedulePage() {
   };
 
   const getDayEntries = (dayName) =>
-    schedule
-      .filter((s) => s.day === dayName)
-      .sort((a, b) => {
-        const aStart = parseTimeToMinutes(a.time?.split("-")[0]?.trim());
-        const bStart = parseTimeToMinutes(b.time?.split("-")[0]?.trim());
-        return aStart - bStart;
-      });
+    schedule.filter((s) => s.day === dayName).sort((a, b) => parseTimeToMinutes(a.time?.split("-")[0]?.trim()) - parseTimeToMinutes(b.time?.split("-")[0]?.trim()));
 
-  const totalClasses = schedule.length;
-  const todayClasses = getDayEntries(DAYS[getCurrentDayIndex()]).length;
+  const totalClasses  = schedule.length;
+  const todayClasses  = getDayEntries(DAYS[getCurrentDayIndex()]).length;
   const uniqueCourses = [...new Set(schedule.map((s) => s.courseName))].length;
-
-  const availableEndTimes = TIME_OPTIONS.filter(
-    (time) => !startTime || parseTimeToMinutes(time) > parseTimeToMinutes(startTime)
-  );
+  const availableEndTimes = TIME_OPTIONS.filter((time) => !startTime || parseTimeToMinutes(time) > parseTimeToMinutes(startTime));
 
   return (
     <div style={page}>
@@ -401,7 +264,6 @@ export default function SchedulePage() {
 @keyframes slideIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
 .fade-in { animation: fadeUp 0.3s ease; }
 .slide-in { animation: slideIn 0.25s ease; }
-@keyframes spin { to { transform: rotate(360deg); } }
 @media(max-width:900px) { .sc-week-grid { min-width: 600px !important; } }
       `}</style>
 
@@ -413,144 +275,61 @@ export default function SchedulePage() {
             <h1 style={titleStyle}>Weekly Schedule</h1>
             <p style={subtitleStyle}>Manage and view your class timetable</p>
           </div>
-          <button
-            className="add-btn"
-            onClick={() => setShowForm(!showForm)}
-            style={addBtnStyle}
-          >
+          <button className="add-btn" onClick={() => setShowForm(!showForm)} style={addBtnStyle}>
             {showForm ? "✕ Cancel" : "+ Add Class"}
           </button>
         </div>
 
         <div style={statsRow}>
           {[
-            { label: "Total Classes", value: totalClasses, color: "#2563eb" },
-            { label: "Today's Classes", value: todayClasses, color: "#16a34a" },
-            { label: "Courses", value: uniqueCourses, color: "#9333ea" },
+            { label: "Total Classes",   value: totalClasses,  color: "#2563eb" },
+            { label: "Today's Classes", value: todayClasses,  color: "#16a34a" },
+            { label: "Courses",         value: uniqueCourses, color: "#9333ea" },
           ].map((stat) => (
             <div key={stat.label} style={statCard}>
-              <span
-                style={{
-                  fontSize: "26px",
-                  fontWeight: "800",
-                  color: stat.color,
-                  fontFamily: "'DM Mono'",
-                }}
-              >
-                {stat.value}
-              </span>
-              <span style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>
-                {stat.label}
-              </span>
+              <span style={{ fontSize: "26px", fontWeight: "800", color: stat.color, fontFamily: "'DM Mono'" }}>{stat.value}</span>
+              <span style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px" }}>{stat.label}</span>
             </div>
           ))}
         </div>
 
         {showForm && (
           <div style={formCard} className="slide-in">
-            <h3
-              style={{
-                margin: "0 0 16px",
-                fontSize: "16px",
-                fontWeight: "700",
-                color: "#0f172a",
-              }}
-            >
-              Add New Class
-            </h3>
-
+            <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "700", color: "#0f172a" }}>Add New Class</h3>
             <div style={formGrid}>
               <div style={formGroup}>
                 <label style={formLabel}>Course Name</label>
-                <input
-                  className="form-input"
-                  style={formInput}
-                  type="text"
-                  placeholder="e.g. Data Structures"
-                  value={courseName}
-                  onChange={(e) => setCourseName(e.target.value)}
-                />
+                <input className="form-input" style={formInput} type="text" placeholder="e.g. Data Structures" value={courseName} onChange={(e) => setCourseName(e.target.value)} />
               </div>
-
               <div style={formGroup}>
                 <label style={formLabel}>Day</label>
-                <select
-                  className="form-input"
-                  style={formInput}
-                  value={day}
-                  onChange={(e) => setDay(e.target.value)}
-                >
-                  {DAYS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
+                <select className="form-input" style={formInput} value={day} onChange={(e) => setDay(e.target.value)}>
+                  {DAYS.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
-
               <div style={formGroup}>
                 <label style={formLabel}>Start Time</label>
-                <select
-                  className="form-input"
-                  style={formInput}
-                  value={startTime}
-                  onChange={(e) => {
-                    const selected = e.target.value;
-                    setStartTime(selected);
-                    if (endTime && parseTimeToMinutes(endTime) <= parseTimeToMinutes(selected)) {
-                      setEndTime("");
-                    }
-                  }}
-                >
+                <select className="form-input" style={formInput} value={startTime} onChange={(e) => { setStartTime(e.target.value); if (endTime && parseTimeToMinutes(endTime) <= parseTimeToMinutes(e.target.value)) setEndTime(""); }}>
                   <option value="">Select start time</option>
-                  {TIME_OPTIONS.map((time) => (
-                    <option key={time} value={time}>
-                      {formatDisplayTime(time)}
-                    </option>
-                  ))}
+                  {TIME_OPTIONS.map((t) => <option key={t} value={t}>{formatDisplayTime(t)}</option>)}
                 </select>
               </div>
-
               <div style={formGroup}>
                 <label style={formLabel}>End Time</label>
-                <select
-                  className="form-input"
-                  style={formInput}
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                >
+                <select className="form-input" style={formInput} value={endTime} onChange={(e) => setEndTime(e.target.value)}>
                   <option value="">Select end time</option>
-                  {availableEndTimes.map((time) => (
-                    <option key={time} value={time}>
-                      {formatDisplayTime(time)}
-                    </option>
-                  ))}
+                  {availableEndTimes.map((t) => <option key={t} value={t}>{formatDisplayTime(t)}</option>)}
                 </select>
               </div>
-
               <div style={{ ...formGroup, gridColumn: "1 / -1" }}>
                 <label style={formLabel}>Room</label>
-                <input
-                  className="form-input"
-                  style={formInput}
-                  type="text"
-                  placeholder="e.g. G101, Lab 3, Building A"
-                  value={typeof room === "object" ? room?.name || room?.roomName || "" : room}
-                  onChange={(e) => setRoom(e.target.value)}
-                  list="rooms-suggestions"
-                />
+                <input className="form-input" style={formInput} type="text" placeholder="e.g. G101, Lab 3, Building A" value={typeof room === "object" ? room?.name || room?.roomName || "" : room} onChange={(e) => setRoom(e.target.value)} list="rooms-suggestions" />
                 <datalist id="rooms-suggestions">
-                  {rooms.map((r, i) => {
-                    const name = r.name || r.roomName || r;
-                    return <option key={i} value={name} />;
-                  })}
+                  {rooms.map((r, i) => <option key={i} value={r.name || r.roomName || r} />)}
                 </datalist>
               </div>
             </div>
-
-            <button className="add-btn" onClick={addSchedule} style={confirmBtnStyle}>
-              Add to Schedule →
-            </button>
+            <button className="add-btn" onClick={addSchedule} style={confirmBtnStyle}>Add to Schedule →</button>
           </div>
         )}
 
@@ -558,84 +337,21 @@ export default function SchedulePage() {
           <div style={viewToggleRow}>
             <div style={viewToggle}>
               {["week", "day"].map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  style={{
-                    padding: "8px 18px",
-                    borderRadius: "8px",
-                    border: "none",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    fontFamily: "'DM Sans'",
-                    background: viewMode === mode ? "#0f172a" : "transparent",
-                    color: viewMode === mode ? "white" : "#64748b",
-                    transition: "all 0.15s",
-                  }}
-                >
+                <button key={mode} onClick={() => setViewMode(mode)} style={{ padding: "8px 18px", borderRadius: "8px", border: "none", fontSize: "13px", fontWeight: "600", cursor: "pointer", fontFamily: "'DM Sans'", background: viewMode === mode ? "#0f172a" : "transparent", color: viewMode === mode ? "white" : "#64748b", transition: "all 0.15s" }}>
                   {mode === "week" ? "📅 Week" : "📋 Day"}
                 </button>
               ))}
             </div>
-
             <div style={dayTabs}>
               {DAYS.map((d) => {
                 const count = getDayEntries(d).length;
-                const isToday = d === DAYS[getCurrentDayIndex()];
+                const isToday  = d === DAYS[getCurrentDayIndex()];
                 const isActive = d === activeDay;
                 return (
-                  <div
-                    key={d}
-                    className="day-tab"
-                    onClick={() => {
-                      setActiveDay(d);
-                      setViewMode("day");
-                    }}
-                    style={{
-                      padding: "8px 14px",
-                      borderRadius: "10px",
-                      fontWeight: isActive ? "700" : "500",
-                      fontSize: "13px",
-                      color: isActive ? "white" : isToday ? "#2563eb" : "#475569",
-                      background: isActive ? "#2563eb" : isToday ? "#eff6ff" : "white",
-                      border: `1.5px solid ${
-                        isActive ? "#2563eb" : isToday ? "#bfdbfe" : "#e2e8f0"
-                      }`,
-                      position: "relative",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
+                  <div key={d} className="day-tab" onClick={() => { setActiveDay(d); setViewMode("day"); }} style={{ padding: "8px 14px", borderRadius: "10px", fontWeight: isActive ? "700" : "500", fontSize: "13px", color: isActive ? "white" : isToday ? "#2563eb" : "#475569", background: isActive ? "#2563eb" : isToday ? "#eff6ff" : "white", border: `1.5px solid ${isActive ? "#2563eb" : isToday ? "#bfdbfe" : "#e2e8f0"}`, position: "relative", display: "flex", alignItems: "center", gap: "6px" }}>
                     <span>{DAY_SHORT[d]}</span>
-                    {count > 0 && (
-                      <span
-                        style={{
-                          background: isActive ? "rgba(255,255,255,0.3)" : "#e2e8f0",
-                          color: isActive ? "white" : "#475569",
-                          borderRadius: "999px",
-                          fontSize: "11px",
-                          padding: "1px 7px",
-                          fontWeight: "700",
-                        }}
-                      >
-                        {count}
-                      </span>
-                    )}
-                    {isToday && !isActive && (
-                      <span
-                        style={{
-                          width: "6px",
-                          height: "6px",
-                          background: "#2563eb",
-                          borderRadius: "50%",
-                          position: "absolute",
-                          top: "4px",
-                          right: "4px",
-                        }}
-                      />
-                    )}
+                    {count > 0 && <span style={{ background: isActive ? "rgba(255,255,255,0.3)" : "#e2e8f0", color: isActive ? "white" : "#475569", borderRadius: "999px", fontSize: "11px", padding: "1px 7px", fontWeight: "700" }}>{count}</span>}
+                    {isToday && !isActive && <span style={{ width: "6px", height: "6px", background: "#2563eb", borderRadius: "50%", position: "absolute", top: "4px", right: "4px" }} />}
                   </div>
                 );
               })}
@@ -646,157 +362,40 @@ export default function SchedulePage() {
         {schedule.length === 0 && (
           <div style={emptyState}>
             <div style={{ fontSize: "52px", marginBottom: "14px" }}>🗓</div>
-            <p
-              style={{
-                fontWeight: "700",
-                fontSize: "20px",
-                color: "#0f172a",
-                margin: "0 0 8px",
-              }}
-            >
-              No classes yet
-            </p>
-            <p style={{ color: "#64748b", margin: "0 0 20px" }}>
-              Add your first class using the button above.
-            </p>
-            <button className="add-btn" onClick={() => setShowForm(true)} style={addBtnStyle}>
-              + Add First Class
-            </button>
+            <p style={{ fontWeight: "700", fontSize: "20px", color: "#0f172a", margin: "0 0 8px" }}>No classes yet</p>
+            <p style={{ color: "#64748b", margin: "0 0 20px" }}>Add your first class using the button above.</p>
+            <button className="add-btn" onClick={() => setShowForm(true)} style={addBtnStyle}>+ Add First Class</button>
           </div>
         )}
 
         {schedule.length > 0 && viewMode === "week" && (
           <div style={{ overflowX: "auto" }}>
-            <div
-              className="sc-week-grid"
-              style={{
-                display: "grid",
-                gridTemplateColumns: `repeat(${DAYS.length}, minmax(180px, 1fr))`,
-                gap: "12px",
-                minWidth: "820px",
-              }}
-            >
+            <div className="sc-week-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${DAYS.length}, minmax(180px, 1fr))`, gap: "12px", minWidth: "820px" }}>
               {DAYS.map((d) => {
                 const entries = getDayEntries(d);
                 const isToday = d === DAYS[getCurrentDayIndex()];
                 return (
                   <div key={d}>
-                    <div
-                      style={{
-                        padding: "10px 14px",
-                        borderRadius: "12px",
-                        marginBottom: "10px",
-                        textAlign: "center",
-                        background: isToday ? "#0f172a" : "white",
-                        border: `1.5px solid ${isToday ? "#0f172a" : "#e2e8f0"}`,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontWeight: "700",
-                          fontSize: "14px",
-                          color: isToday ? "white" : "#0f172a",
-                        }}
-                      >
-                        {d}
-                      </div>
-                      {isToday && (
-                        <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
-                          Today
-                        </div>
-                      )}
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: isToday ? "#94a3b8" : "#64748b",
-                          marginTop: "2px",
-                        }}
-                      >
-                        {entries.length} {entries.length === 1 ? "class" : "classes"}
-                      </div>
+                    <div style={{ padding: "10px 14px", borderRadius: "12px", marginBottom: "10px", textAlign: "center", background: isToday ? "#0f172a" : "white", border: `1.5px solid ${isToday ? "#0f172a" : "#e2e8f0"}` }}>
+                      <div style={{ fontWeight: "700", fontSize: "14px", color: isToday ? "white" : "#0f172a" }}>{d}</div>
+                      {isToday && <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Today</div>}
+                      <div style={{ fontSize: "11px", color: isToday ? "#94a3b8" : "#64748b", marginTop: "2px" }}>{entries.length} {entries.length === 1 ? "class" : "classes"}</div>
                     </div>
-
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                       {entries.length === 0 ? (
-                        <div
-                          style={{
-                            padding: "20px 14px",
-                            textAlign: "center",
-                            color: "#cbd5e1",
-                            fontSize: "13px",
-                            background: "#fafafa",
-                            borderRadius: "12px",
-                            border: "1.5px dashed #e2e8f0",
-                          }}
-                        >
-                          No classes
-                        </div>
+                        <div style={{ padding: "20px 14px", textAlign: "center", color: "#cbd5e1", fontSize: "13px", background: "#fafafa", borderRadius: "12px", border: "1.5px dashed #e2e8f0" }}>No classes</div>
                       ) : (
                         entries.map((entry) => {
                           const color = courseColorMap[entry.courseName] || COURSE_COLORS[0];
                           const duration = getDuration(entry.time);
                           const parts = entry.time?.split("-").map((t) => t.trim());
-
                           return (
-                            <div
-                              key={entry.id}
-                              className="hover-card fade-in"
-                              style={{
-                                background: color.bg,
-                                border: `1.5px solid ${color.border}`,
-                                borderRadius: "12px",
-                                padding: "12px",
-                                position: "relative",
-                                borderLeft: `4px solid ${color.accent}`,
-                              }}
-                            >
-                              <button
-                                className="icon-btn"
-                                onClick={() => deleteSchedule(entry.id)}
-                                style={{
-                                  position: "absolute",
-                                  top: "8px",
-                                  right: "8px",
-                                  color: "#cbd5e1",
-                                  fontSize: "13px",
-                                  padding: "3px 6px",
-                                  borderRadius: "6px",
-                                }}
-                                title="Remove"
-                              >
-                                ✕
-                              </button>
-
-                              <div
-                                style={{
-                                  fontWeight: "700",
-                                  fontSize: "13px",
-                                  color: color.text,
-                                  marginBottom: "6px",
-                                  paddingRight: "20px",
-                                }}
-                              >
-                                {entry.courseName}
-                              </div>
-
-                              <div
-                                style={{
-                                  fontSize: "11px",
-                                  color: "#64748b",
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: "3px",
-                                }}
-                              >
-                                <span>
-                                  🕐 {parts?.[0] ? formatDisplayTime(parts[0]) : ""} –{" "}
-                                  {parts?.[1] ? formatDisplayTime(parts[1]) : ""}
-                                </span>
-                                {duration && (
-                                  <span style={{ color: color.text, fontWeight: "600" }}>
-                                    ⏱ {duration}
-                                  </span>
-                                )}
+                            <div key={entry.id} className="hover-card fade-in" style={{ background: color.bg, border: `1.5px solid ${color.border}`, borderRadius: "12px", padding: "12px", position: "relative", borderLeft: `4px solid ${color.accent}` }}>
+                              <button className="icon-btn" onClick={() => deleteSchedule(entry.id)} style={{ position: "absolute", top: "8px", right: "8px", color: "#cbd5e1", fontSize: "13px", padding: "3px 6px", borderRadius: "6px" }} title="Remove">✕</button>
+                              <div style={{ fontWeight: "700", fontSize: "13px", color: color.text, marginBottom: "6px", paddingRight: "20px" }}>{entry.courseName}</div>
+                              <div style={{ fontSize: "11px", color: "#64748b", display: "flex", flexDirection: "column", gap: "3px" }}>
+                                <span>🕐 {parts?.[0] ? formatDisplayTime(parts[0]) : ""} – {parts?.[1] ? formatDisplayTime(parts[1]) : ""}</span>
+                                {duration && <span style={{ color: color.text, fontWeight: "600" }}>⏱ {duration}</span>}
                                 <span>📍 {entry.room}</span>
                               </div>
                             </div>
@@ -813,34 +412,10 @@ export default function SchedulePage() {
 
         {schedule.length > 0 && viewMode === "day" && (
           <div style={dayViewContainer} className="fade-in">
-            <h2
-              style={{
-                margin: "0 0 20px",
-                fontSize: "20px",
-                fontWeight: "700",
-                color: "#0f172a",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
+            <h2 style={{ margin: "0 0 20px", fontSize: "20px", fontWeight: "700", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
               {activeDay}
-              {activeDay === DAYS[getCurrentDayIndex()] && (
-                <span
-                  style={{
-                    fontSize: "12px",
-                    background: "#2563eb",
-                    color: "white",
-                    padding: "3px 10px",
-                    borderRadius: "999px",
-                    fontWeight: "600",
-                  }}
-                >
-                  Today
-                </span>
-              )}
+              {activeDay === DAYS[getCurrentDayIndex()] && <span style={{ fontSize: "12px", background: "#2563eb", color: "white", padding: "3px 10px", borderRadius: "999px", fontWeight: "600" }}>Today</span>}
             </h2>
-
             {getDayEntries(activeDay).length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 20px", color: "#94a3b8" }}>
                 <div style={{ fontSize: "40px", marginBottom: "10px" }}>😌</div>
@@ -853,170 +428,30 @@ export default function SchedulePage() {
                   const duration = getDuration(entry.time);
                   const parts = entry.time?.split("-").map((t) => t.trim());
                   const startMins = parseTimeToMinutes(parts?.[0]);
-                  const endMins = parseTimeToMinutes(parts?.[1]);
-                  const nowMins = getCurrentMinutes();
-                  const isOngoing =
-                    nowMins >= startMins &&
-                    nowMins < endMins &&
-                    activeDay === DAYS[getCurrentDayIndex()];
-                  const isPast =
-                    nowMins >= endMins && activeDay === DAYS[getCurrentDayIndex()];
-
+                  const endMins   = parseTimeToMinutes(parts?.[1]);
+                  const nowMins   = getCurrentMinutes();
+                  const isOngoing = nowMins >= startMins && nowMins < endMins && activeDay === DAYS[getCurrentDayIndex()];
+                  const isPast    = nowMins >= endMins && activeDay === DAYS[getCurrentDayIndex()];
                   return (
-                    <div
-                      key={entry.id}
-                      className="hover-card fade-in"
-                      style={{
-                        background: isPast ? "#f8fafc" : "white",
-                        border: `1.5px solid ${isOngoing ? color.accent : "#e2e8f0"}`,
-                        borderRadius: "16px",
-                        padding: "18px 20px",
-                        display: "flex",
-                        gap: "18px",
-                        alignItems: "flex-start",
-                        opacity: isPast ? 0.65 : 1,
-                        boxShadow: isOngoing
-                          ? `0 0 0 3px ${color.accent}22`
-                          : "0 2px 8px rgba(15,23,42,0.05)",
-                      }}
-                    >
+                    <div key={entry.id} className="hover-card fade-in" style={{ background: isPast ? "#f8fafc" : "white", border: `1.5px solid ${isOngoing ? color.accent : "#e2e8f0"}`, borderRadius: "16px", padding: "18px 20px", display: "flex", gap: "18px", alignItems: "flex-start", opacity: isPast ? 0.65 : 1, boxShadow: isOngoing ? `0 0 0 3px ${color.accent}22` : "0 2px 8px rgba(15,23,42,0.05)" }}>
                       <div style={{ minWidth: "80px", textAlign: "center" }}>
-                        <div
-                          style={{
-                            fontFamily: "'DM Mono'",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                            color: color.accent,
-                          }}
-                        >
-                          {parts?.[0] ? formatDisplayTime(parts[0]) : ""}
-                        </div>
-                        <div
-                          style={{
-                            width: "1px",
-                            height: "20px",
-                            background: "#e2e8f0",
-                            margin: "6px auto",
-                          }}
-                        />
-                        <div
-                          style={{
-                            fontFamily: "'DM Mono'",
-                            fontSize: "13px",
-                            fontWeight: "600",
-                            color: "#94a3b8",
-                          }}
-                        >
-                          {parts?.[1] ? formatDisplayTime(parts[1]) : ""}
-                        </div>
+                        <div style={{ fontFamily: "'DM Mono'", fontSize: "13px", fontWeight: "600", color: color.accent }}>{parts?.[0] ? formatDisplayTime(parts[0]) : ""}</div>
+                        <div style={{ width: "1px", height: "20px", background: "#e2e8f0", margin: "6px auto" }} />
+                        <div style={{ fontFamily: "'DM Mono'", fontSize: "13px", fontWeight: "600", color: "#94a3b8" }}>{parts?.[1] ? formatDisplayTime(parts[1]) : ""}</div>
                       </div>
-
-                      <div
-                        style={{
-                          width: "4px",
-                          borderRadius: "999px",
-                          background: color.accent,
-                          alignSelf: "stretch",
-                          flexShrink: 0,
-                        }}
-                      />
-
+                      <div style={{ width: "4px", borderRadius: "999px", background: color.accent, alignSelf: "stretch", flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "10px",
-                            marginBottom: "8px",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <h3
-                            style={{
-                              margin: 0,
-                              fontSize: "16px",
-                              fontWeight: "700",
-                              color: "#0f172a",
-                            }}
-                          >
-                            {entry.courseName}
-                          </h3>
-
-                          {isOngoing && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                background: color.bg,
-                                color: color.text,
-                                border: `1px solid ${color.border}`,
-                                padding: "3px 10px",
-                                borderRadius: "999px",
-                                fontWeight: "700",
-                              }}
-                            >
-                              🔴 Live
-                            </span>
-                          )}
-
-                          {isPast && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                background: "#f1f5f9",
-                                color: "#94a3b8",
-                                padding: "3px 10px",
-                                borderRadius: "999px",
-                                fontWeight: "600",
-                              }}
-                            >
-                              Done
-                            </span>
-                          )}
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px", flexWrap: "wrap" }}>
+                          <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0f172a" }}>{entry.courseName}</h3>
+                          {isOngoing && <span style={{ fontSize: "11px", background: color.bg, color: color.text, border: `1px solid ${color.border}`, padding: "3px 10px", borderRadius: "999px", fontWeight: "700" }}>🔴 Live</span>}
+                          {isPast    && <span style={{ fontSize: "11px", background: "#f1f5f9", color: "#94a3b8", padding: "3px 10px", borderRadius: "999px", fontWeight: "600" }}>Done</span>}
                         </div>
-
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "14px" }}>
-                          <span
-                            style={{
-                              fontSize: "13px",
-                              color: "#64748b",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "5px",
-                            }}
-                          >
-                            📍 <strong style={{ color: "#334155" }}>{entry.room}</strong>
-                          </span>
-
-                          {duration && (
-                            <span
-                              style={{
-                                fontSize: "13px",
-                                color: "#64748b",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "5px",
-                              }}
-                            >
-                              ⏱ <strong style={{ color: "#334155" }}>{duration}</strong>
-                            </span>
-                          )}
+                          <span style={{ fontSize: "13px", color: "#64748b", display: "flex", alignItems: "center", gap: "5px" }}>📍 <strong style={{ color: "#334155" }}>{entry.room}</strong></span>
+                          {duration && <span style={{ fontSize: "13px", color: "#64748b", display: "flex", alignItems: "center", gap: "5px" }}>⏱ <strong style={{ color: "#334155" }}>{duration}</strong></span>}
                         </div>
                       </div>
-
-                      <button
-                        className="icon-btn"
-                        onClick={() => deleteSchedule(entry.id)}
-                        style={{
-                          color: "#cbd5e1",
-                          fontSize: "15px",
-                          padding: "4px 8px",
-                          borderRadius: "8px",
-                          flexShrink: 0,
-                        }}
-                        title="Remove"
-                      >
-                        ✕
-                      </button>
+                      <button className="icon-btn" onClick={() => deleteSchedule(entry.id)} style={{ color: "#cbd5e1", fontSize: "15px", padding: "4px 8px", borderRadius: "8px", flexShrink: 0 }} title="Remove">✕</button>
                     </div>
                   );
                 })}
@@ -1029,170 +464,23 @@ export default function SchedulePage() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const page = {
-  padding: "24px 20px 48px",
-  fontFamily: "'DM Sans', sans-serif",
-  minHeight: "100vh",
-  background: "#f8fafc",
-};
-
-const container = { maxWidth: "1100px", margin: "0 auto" };
-
-const headerRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  flexWrap: "wrap",
-  gap: "16px",
-  marginBottom: "20px",
-};
-
-const titleStyle = {
-  fontSize: "32px",
-  fontWeight: "800",
-  color: "#0f172a",
-  margin: "0 0 4px",
-  letterSpacing: "-0.6px",
-};
-
-const subtitleStyle = { color: "#64748b", fontSize: "15px", margin: 0 };
-
-const addBtnStyle = {
-  padding: "11px 22px",
-  borderRadius: "10px",
-  border: "none",
-  background: "#2563eb",
-  color: "white",
-  fontWeight: "700",
-  fontSize: "14px",
-  cursor: "pointer",
-  fontFamily: "'DM Sans'",
-  boxShadow: "0 4px 12px rgba(37,99,235,0.25)",
-  transition: "filter 0.15s, transform 0.1s",
-};
-
-const statsRow = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: "12px",
-  marginBottom: "20px",
-};
-
-const statCard = {
-  background: "white",
-  borderRadius: "16px",
-  padding: "16px 20px",
-  border: "1.5px solid #e2e8f0",
-  display: "flex",
-  flexDirection: "column",
-  boxShadow: "0 2px 10px rgba(15,23,42,0.06)",
-  transition: "box-shadow 0.18s, transform 0.18s",
-};
-
-const formCard = {
-  background: "white",
-  borderRadius: "18px",
-  padding: "24px",
-  border: "1.5px solid #e2e8f0",
-  boxShadow: "0 4px 20px rgba(15,23,42,0.08)",
-  marginBottom: "20px",
-};
-
-const formGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-  gap: "14px",
-  marginBottom: "16px",
-};
-
-const formGroup = { display: "flex", flexDirection: "column", gap: "6px" };
-
-const formLabel = {
-  fontSize: "12px",
-  fontWeight: "700",
-  color: "#475569",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-};
-
-const formInput = {
-  padding: "11px 14px",
-  borderRadius: "10px",
-  border: "1.5px solid #e2e8f0",
-  fontSize: "14px",
-  background: "#f8fafc",
-  color: "#0f172a",
-  fontFamily: "'DM Sans'",
-  transition: "border-color 0.15s, box-shadow 0.15s",
-  width: "100%",
-};
-
-const confirmBtnStyle = {
-  padding: "12px 26px",
-  borderRadius: "10px",
-  border: "none",
-  background: "#0f172a",
-  color: "white",
-  fontWeight: "700",
-  fontSize: "14px",
-  cursor: "pointer",
-  fontFamily: "'DM Sans'",
-  boxShadow: "0 4px 12px rgba(15,23,42,0.2)",
-  transition: "filter 0.15s",
-};
-
-const viewToggleRow = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "12px",
-  marginBottom: "18px",
-};
-
-const viewToggle = {
-  display: "inline-flex",
-  background: "#f1f5f9",
-  borderRadius: "10px",
-  padding: "4px",
-  width: "fit-content",
-};
-
-const dayTabs = {
-  display: "flex",
-  gap: "8px",
-  flexWrap: "wrap",
-};
-
-const dayViewContainer = {
-  background: "white",
-  borderRadius: "20px",
-  padding: "26px",
-  border: "1.5px solid #e2e8f0",
-  boxShadow: "0 4px 20px rgba(15,23,42,0.07)",
-};
-
-const emptyState = {
-  textAlign: "center",
-  padding: "60px 20px",
-  background: "white",
-  borderRadius: "20px",
-  border: "1.5px dashed #e2e8f0",
-};
-
-const toastStyle = {
-  position: "fixed",
-  bottom: "28px",
-  left: "50%",
-  transform: "translateX(-50%)",
-  background: "#0f172a",
-  color: "white",
-  padding: "13px 26px",
-  borderRadius: "999px",
-  fontSize: "14px",
-  fontWeight: "700",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.20)",
-  zIndex: 9999,
-  animation: "fadeUp 0.25s ease",
-  fontFamily: "'DM Sans'",
-  whiteSpace: "nowrap",
-};
+const page             = { padding: "24px 20px 48px", fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", background: "#f8fafc" };
+const container        = { maxWidth: "1100px", margin: "0 auto" };
+const headerRow        = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "20px" };
+const titleStyle       = { fontSize: "32px", fontWeight: "800", color: "#0f172a", margin: "0 0 4px", letterSpacing: "-0.6px" };
+const subtitleStyle    = { color: "#64748b", fontSize: "15px", margin: 0 };
+const addBtnStyle      = { padding: "11px 22px", borderRadius: "10px", border: "none", background: "#2563eb", color: "white", fontWeight: "700", fontSize: "14px", cursor: "pointer", fontFamily: "'DM Sans'", boxShadow: "0 4px 12px rgba(37,99,235,0.25)" };
+const statsRow         = { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "20px" };
+const statCard         = { background: "white", borderRadius: "16px", padding: "16px 20px", border: "1.5px solid #e2e8f0", display: "flex", flexDirection: "column", boxShadow: "0 2px 10px rgba(15,23,42,0.06)" };
+const formCard         = { background: "white", borderRadius: "18px", padding: "24px", border: "1.5px solid #e2e8f0", boxShadow: "0 4px 20px rgba(15,23,42,0.08)", marginBottom: "20px" };
+const formGrid         = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px", marginBottom: "16px" };
+const formGroup        = { display: "flex", flexDirection: "column", gap: "6px" };
+const formLabel        = { fontSize: "12px", fontWeight: "700", color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" };
+const formInput        = { padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #e2e8f0", fontSize: "14px", background: "#f8fafc", color: "#0f172a", fontFamily: "'DM Sans'", width: "100%" };
+const confirmBtnStyle  = { padding: "12px 26px", borderRadius: "10px", border: "none", background: "#0f172a", color: "white", fontWeight: "700", fontSize: "14px", cursor: "pointer", fontFamily: "'DM Sans'", boxShadow: "0 4px 12px rgba(15,23,42,0.2)" };
+const viewToggleRow    = { display: "flex", flexDirection: "column", gap: "12px", marginBottom: "18px" };
+const viewToggle       = { display: "inline-flex", background: "#f1f5f9", borderRadius: "10px", padding: "4px", width: "fit-content" };
+const dayTabs          = { display: "flex", gap: "8px", flexWrap: "wrap" };
+const dayViewContainer = { background: "white", borderRadius: "20px", padding: "26px", border: "1.5px solid #e2e8f0", boxShadow: "0 4px 20px rgba(15,23,42,0.07)" };
+const emptyState       = { textAlign: "center", padding: "60px 20px", background: "white", borderRadius: "20px", border: "1.5px dashed #e2e8f0" };
+const toastStyle       = { position: "fixed", bottom: "28px", left: "50%", transform: "translateX(-50%)", background: "#0f172a", color: "white", padding: "13px 26px", borderRadius: "999px", fontSize: "14px", fontWeight: "700", boxShadow: "0 10px 30px rgba(0,0,0,0.20)", zIndex: 9999, fontFamily: "'DM Sans'", whiteSpace: "nowrap" };

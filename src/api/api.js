@@ -1,15 +1,32 @@
-spring.application.name=smart-campus-assistant
+import axios from "axios";
 
-spring.datasource.url=${DATABASE_URL}
-spring.datasource.username=${DATABASE_USERNAME}
-spring.datasource.password=${DATABASE_PASSWORD}
-spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=false
-spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-jwt.secret=${JWT_SECRET}
-jwt.expiration-ms=86400000
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userName");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("userEmail");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
 
-server.port=${PORT:8080}
+export default api;
