@@ -21,7 +21,7 @@ const countSessionsPerZone = () => {
       try {
         const s = JSON.parse(localStorage.getItem(key));
         if (s?.zoneId) counts[s.zoneId] = (counts[s.zoneId] || 0) + 1;
-      } catch { /* skip */ }
+      } catch {}
     }
   }
   return counts;
@@ -96,9 +96,10 @@ export default function AdminParkingPage() {
   const overallPct    = totalSpots > 0 ? Math.round((totalOccupied / totalSpots) * 100) : 0;
 
   return (
-    <div style={{ padding:"24px 20px 48px", fontFamily:"'DM Sans', system-ui, sans-serif", minHeight:"100vh" }}>
+    <div style={{ padding:"16px 12px 48px", fontFamily:"'DM Sans', system-ui, sans-serif", minHeight:"100vh" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
+        * { box-sizing: border-box; }
         .az-card { transition: box-shadow 0.18s, transform 0.18s; }
         .az-card:hover { box-shadow: 0 12px 32px rgba(15,23,42,0.12); transform: translateY(-2px); }
         .az-btn { transition: filter 0.15s, transform 0.1s; cursor: pointer; }
@@ -109,6 +110,24 @@ export default function AdminParkingPage() {
         .az-fi { animation: fadeUp 0.3s ease; }
         @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
         .az-live { animation: pulse 2s ease-in-out infinite; }
+
+        .az-page-inner { max-width:1000px; margin:0 auto; }
+
+        .az-header-row { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+        .az-header-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+        .az-stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:12px; }
+        .az-zones-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; margin-bottom:20px; }
+
+        .az-stat-card { background:white; border-radius:14px; padding:14px 16px; border:1.5px solid #e2e8f0; box-shadow:0 2px 8px rgba(15,23,42,0.05); display:flex; flex-direction:column; }
+
+        @media(max-width:640px) {
+          .az-stats-grid { grid-template-columns:repeat(2,1fr); }
+          .az-zones-grid { grid-template-columns:1fr; }
+          .az-header-row { flex-direction:column; }
+          .az-header-actions { width:100%; }
+          .az-header-actions button { flex:1; }
+        }
       `}</style>
 
       {toast && <div style={toastSt} className="az-fi">{toast}</div>}
@@ -149,10 +168,12 @@ export default function AdminParkingPage() {
           <div style={modal} className="az-fi">
             <p style={mTitle}>Edit {editZone.name}</p>
             <p style={mSub}>Set occupied spots (0 – {editZone.total})</p>
-            <input className="az-ni" type="number" min={0} max={editZone.total} value={editValue}
+            <input
+              className="az-ni"
+              type="number" min={0} max={editZone.total} value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && saveEdit()}
-              style={{width:"100%",padding:"12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"24px",fontWeight:"800",color:"#0f172a",background:"#f8fafc",fontFamily:"'DM Mono',monospace",textAlign:"center",boxSizing:"border-box",transition:"border-color 0.15s,box-shadow 0.15s"}}
+              style={{width:"100%",padding:"12px",borderRadius:"10px",border:"1.5px solid #e2e8f0",fontSize:"24px",fontWeight:"800",color:"#0f172a",background:"#f8fafc",fontFamily:"'DM Mono',monospace",textAlign:"center",boxSizing:"border-box"}}
               autoFocus
             />
             <p style={{fontSize:"12px",color:"#94a3b8",margin:"8px 0 18px",textAlign:"center"}}>/ {editZone.total} total</p>
@@ -164,74 +185,79 @@ export default function AdminParkingPage() {
         </div>
       )}
 
-      <div style={{maxWidth:"1000px",margin:"0 auto"}}>
+      <div className="az-page-inner">
         {/* Header */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:"16px",marginBottom:"24px"}}>
+        <div className="az-header-row">
           <div>
             <div style={{display:"inline-block",padding:"4px 12px",borderRadius:"999px",background:"#fef3c7",border:"1px solid #fde68a",color:"#92400e",fontSize:"12px",fontWeight:"700",marginBottom:"8px"}}>🛡 Admin Panel</div>
-            <h1 style={{fontSize:"28px",fontWeight:"800",color:"#0f172a",margin:"0 0 4px",letterSpacing:"-0.5px"}}>Parking Management</h1>
-            <p style={{color:"#64748b",fontSize:"14px",margin:0}}>Monitor and control all campus parking zones.</p>
+            <h1 style={{fontSize:"24px",fontWeight:"800",color:"#0f172a",margin:"0 0 4px",letterSpacing:"-0.4px"}}>Parking Management</h1>
+            <p style={{color:"#64748b",fontSize:"13px",margin:0}}>Monitor and control all campus parking zones.</p>
           </div>
-          <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
-            <button className="az-btn" onClick={refresh} style={{padding:"10px 18px",borderRadius:"10px",border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:"600",fontSize:"13px",fontFamily:"'DM Sans'"}}>↻ Refresh</button>
-            <button className="az-btn" onClick={() => setConfirmReset(true)} style={{padding:"10px 18px",borderRadius:"10px",border:"none",background:"#fef2f2",color:"#dc2626",fontWeight:"700",fontSize:"13px",fontFamily:"'DM Sans'"}}>🔄 Reset All</button>
+          <div className="az-header-actions">
+            <button className="az-btn" onClick={refresh} style={{padding:"10px 16px",borderRadius:"10px",border:"1.5px solid #e2e8f0",background:"white",color:"#475569",fontWeight:"600",fontSize:"13px",fontFamily:"'DM Sans'"}}>↻ Refresh</button>
+            <button className="az-btn" onClick={() => setConfirmReset(true)} style={{padding:"10px 16px",borderRadius:"10px",border:"none",background:"#fef2f2",color:"#dc2626",fontWeight:"700",fontSize:"13px",fontFamily:"'DM Sans'"}}>🔄 Reset All</button>
           </div>
         </div>
 
         {/* Summary */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"12px",marginBottom:"14px"}}>
-          {[{label:"Total Spots",value:totalSpots,color:"#0f172a"},{label:"Occupied",value:totalOccupied,color:"#ef4444"},{label:"Available",value:totalAvail,color:"#22c55e"},{label:"Active Check-ins",value:totalSessions,color:"#2563eb"}].map((s) => (
-            <div key={s.label} style={{background:"white",borderRadius:"14px",padding:"16px 18px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 8px rgba(15,23,42,0.05)",display:"flex",flexDirection:"column"}}>
-              <span style={{fontSize:"30px",fontWeight:"800",color:s.color,fontFamily:"'DM Mono'"}}>{s.value}</span>
-              <span style={{fontSize:"11px",fontWeight:"700",color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginTop:"5px"}}>{s.label}</span>
+        <div className="az-stats-grid">
+          {[
+            {label:"Total Spots",     value:totalSpots,    color:"#0f172a"},
+            {label:"Occupied",        value:totalOccupied, color:"#ef4444"},
+            {label:"Available",       value:totalAvail,    color:"#22c55e"},
+            {label:"Active Check-ins",value:totalSessions, color:"#2563eb"},
+          ].map((s) => (
+            <div key={s.label} className="az-stat-card">
+              <span style={{fontSize:"26px",fontWeight:"800",color:s.color,fontFamily:"'DM Mono'"}}>{s.value}</span>
+              <span style={{fontSize:"11px",fontWeight:"700",color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginTop:"4px"}}>{s.label}</span>
             </div>
           ))}
         </div>
 
         {/* Live tag */}
-        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"22px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"18px"}}>
           <span className="az-live" style={{width:8,height:8,borderRadius:"50%",background:"#22c55e",display:"inline-block"}} />
           <span style={{fontSize:"12px",color:"#64748b",fontWeight:"600"}}>Auto-refreshes every 5 seconds</span>
         </div>
 
         {/* Zone Cards */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:"16px",marginBottom:"24px"}}>
+        <div className="az-zones-grid">
           {zones.map((zone) => {
             const avail    = zone.total - zone.occupied;
             const pct      = zone.total > 0 ? Math.round((zone.occupied / zone.total) * 100) : 0;
             const status   = getStatus(pct);
             const sessions = sessionCounts[zone.id] || 0;
             return (
-              <div key={zone.id} className="az-card" style={{background:"white",borderRadius:"16px",padding:"18px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 8px rgba(15,23,42,0.05)",position:"relative",overflow:"hidden"}}>
+              <div key={zone.id} className="az-card" style={{background:"white",borderRadius:"16px",padding:"16px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 8px rgba(15,23,42,0.05)",position:"relative",overflow:"hidden"}}>
                 <div style={{position:"absolute",top:0,left:0,right:0,height:"4px",background:status.bar,borderRadius:"16px 16px 0 0"}} />
-                <div style={{display:"flex",alignItems:"flex-start",gap:"12px",marginTop:"8px",marginBottom:"14px"}}>
-                  <span style={{fontSize:"28px",lineHeight:1}}>{zone.icon}</span>
+                <div style={{display:"flex",alignItems:"flex-start",gap:"10px",marginTop:"8px",marginBottom:"12px"}}>
+                  <span style={{fontSize:"26px",lineHeight:1}}>{zone.icon}</span>
                   <div style={{flex:1,minWidth:0}}>
-                    <h3 style={{margin:"0 0 3px",fontSize:"16px",fontWeight:"800",color:"#0f172a"}}>{zone.name}</h3>
+                    <h3 style={{margin:"0 0 3px",fontSize:"15px",fontWeight:"800",color:"#0f172a"}}>{zone.name}</h3>
                     <p style={{margin:0,fontSize:"12px",color:"#94a3b8"}}>{zone.description}</p>
                   </div>
-                  <span style={{padding:"4px 10px",borderRadius:"999px",fontSize:"11px",fontWeight:"700",background:status.light,color:status.text,flexShrink:0}}>{status.label}</span>
+                  <span style={{padding:"4px 10px",borderRadius:"999px",fontSize:"11px",fontWeight:"700",background:status.light,color:status.text,flexShrink:0,whiteSpace:"nowrap"}}>{status.label}</span>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:"10px"}}>
                   <div>
                     <div style={{display:"flex",alignItems:"baseline",gap:"6px"}}>
-                      <span style={{fontSize:"38px",fontWeight:"800",color:"#0f172a",fontFamily:"'DM Mono'",lineHeight:1}}>{avail}</span>
-                      <span style={{fontSize:"14px",color:"#94a3b8"}}>/ {zone.total}</span>
+                      <span style={{fontSize:"34px",fontWeight:"800",color:"#0f172a",fontFamily:"'DM Mono'",lineHeight:1}}>{avail}</span>
+                      <span style={{fontSize:"13px",color:"#94a3b8"}}>/ {zone.total}</span>
                     </div>
-                    <p style={{margin:"3px 0 0",fontSize:"12px",color:"#94a3b8"}}>available spots</p>
+                    <p style={{margin:"2px 0 0",fontSize:"12px",color:"#94a3b8"}}>available spots</p>
                   </div>
-                  <div style={{background:"#eff6ff",borderRadius:"12px",padding:"8px 14px",textAlign:"center",border:"1px solid #bfdbfe",minWidth:"60px"}}>
-                    <div style={{fontSize:"18px",fontWeight:"800",color:"#2563eb",fontFamily:"'DM Mono'"}}>{sessions}</div>
+                  <div style={{background:"#eff6ff",borderRadius:"12px",padding:"8px 12px",textAlign:"center",border:"1px solid #bfdbfe",minWidth:"56px"}}>
+                    <div style={{fontSize:"16px",fontWeight:"800",color:"#2563eb",fontFamily:"'DM Mono'"}}>{sessions}</div>
                     <div style={{fontSize:"10px",color:"#64748b",fontWeight:"600"}}>checked in</div>
                   </div>
                 </div>
                 <div style={{background:"#f1f5f9",borderRadius:"999px",height:"8px",marginBottom:"6px",overflow:"hidden"}}>
                   <div style={{height:"100%",borderRadius:"999px",width:`${pct}%`,background:status.bar,transition:"width 0.4s ease"}} />
                 </div>
-                <p style={{margin:"0 0 14px",fontSize:"12px",color:"#94a3b8",textAlign:"right"}}>{pct}% occupied</p>
+                <p style={{margin:"0 0 12px",fontSize:"12px",color:"#94a3b8",textAlign:"right"}}>{pct}% occupied</p>
                 <div style={{display:"flex",gap:"8px"}}>
                   <button className="az-btn" onClick={() => openEdit(zone)} style={{flex:1,padding:"9px 0",borderRadius:"9px",border:"1.5px solid #e2e8f0",background:"white",color:"#374151",fontWeight:"600",fontSize:"13px",fontFamily:"'DM Sans'"}}>✏️ Set Count</button>
-                  <button className="az-btn" onClick={() => setConfirmZoneReset(zone)} style={{padding:"9px 16px",borderRadius:"9px",border:"none",background:"#fef3c7",color:"#92400e",fontWeight:"700",fontSize:"13px",fontFamily:"'DM Sans'"}}>↺ Reset</button>
+                  <button className="az-btn" onClick={() => setConfirmZoneReset(zone)} style={{padding:"9px 14px",borderRadius:"9px",border:"none",background:"#fef3c7",color:"#92400e",fontWeight:"700",fontSize:"13px",fontFamily:"'DM Sans'"}}>↺ Reset</button>
                 </div>
               </div>
             );
@@ -239,23 +265,23 @@ export default function AdminParkingPage() {
         </div>
 
         {/* Overall bar */}
-        <div style={{background:"white",borderRadius:"16px",padding:"20px 22px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 8px rgba(15,23,42,0.05)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
-            <h3 style={{margin:0,fontSize:"15px",fontWeight:"700",color:"#0f172a"}}>Overall Campus Occupancy</h3>
-            <span style={{fontFamily:"'DM Mono'",fontSize:"14px",fontWeight:"700",color:"#0f172a"}}>{totalOccupied} / {totalSpots}</span>
+        <div style={{background:"white",borderRadius:"16px",padding:"18px 20px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 8px rgba(15,23,42,0.05)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px",flexWrap:"wrap",gap:"8px"}}>
+            <h3 style={{margin:0,fontSize:"14px",fontWeight:"700",color:"#0f172a"}}>Overall Campus Occupancy</h3>
+            <span style={{fontFamily:"'DM Mono'",fontSize:"13px",fontWeight:"700",color:"#0f172a"}}>{totalOccupied} / {totalSpots}</span>
           </div>
           <div style={{background:"#f1f5f9",borderRadius:"999px",height:"12px",overflow:"hidden"}}>
             <div style={{height:"100%",borderRadius:"999px",width:`${overallPct}%`,background:`linear-gradient(90deg, #22c55e, ${overallPct > 80 ? "#ef4444" : "#f59e0b"})`,transition:"width 0.5s ease"}} />
           </div>
-          <p style={{margin:"8px 0 0",fontSize:"12px",color:"#94a3b8"}}>{overallPct}% occupied · {totalAvail} spots available</p>
+          <p style={{margin:"6px 0 0",fontSize:"12px",color:"#94a3b8"}}>{overallPct}% occupied · {totalAvail} spots available</p>
         </div>
       </div>
     </div>
   );
 }
 
-const overlay  = { position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9998 };
-const modal    = { background:"white", borderRadius:"18px", padding:"28px", maxWidth:"360px", width:"90%", textAlign:"center", boxShadow:"0 24px 56px rgba(0,0,0,0.22)", fontFamily:"'DM Sans'" };
+const overlay  = { position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9998, padding:"16px" };
+const modal    = { background:"white", borderRadius:"18px", padding:"24px", maxWidth:"360px", width:"100%", textAlign:"center", boxShadow:"0 24px 56px rgba(0,0,0,0.22)", fontFamily:"'DM Sans'" };
 const mTitle   = { fontWeight:"800", fontSize:"18px", color:"#0f172a", margin:"0 0 8px" };
 const mSub     = { color:"#64748b", fontSize:"13px", margin:"0 0 20px", lineHeight:"1.6" };
 const bRed     = { flex:1, padding:"11px", borderRadius:"10px", border:"none", background:"#ef4444", color:"white", fontWeight:"700", fontSize:"14px", fontFamily:"'DM Sans'" };

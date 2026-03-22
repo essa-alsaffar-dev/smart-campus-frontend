@@ -108,6 +108,14 @@ function TasksPage() {
 @keyframes fadeInUp { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 .task-entry { animation: slideIn 0.2s ease both; }
+
+/* ── Mobile form grid fix ── */
+.task-form-grid { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; margin-bottom: 12px; }
+@media (max-width: 520px) {
+  .task-form-grid { grid-template-columns: 1fr; }
+  .task-form-grid input[type="date"],
+  .task-form-grid select { width: 100%; }
+}
       `}</style>
 
       {successMsg && <div className="toast">{successMsg}</div>}
@@ -131,14 +139,14 @@ function TasksPage() {
         </div>
 
         <div style={formCard}>
-          <div style={formGrid}>
+          <div className="task-form-grid">
             <input className="task-input" type="text" placeholder="Add a new task... (Press Enter)" style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={handleKeyDown} />
             <select className="task-select" style={inputStyle} value={priority} onChange={(e) => setPriority(e.target.value)}>
               {PRIORITIES.map((p) => <option key={p} value={p}>{priorityConfig[p].icon} {p} Priority</option>)}
             </select>
             <input className="task-input" type="date" style={inputStyle} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
-          <button className="add-btn" onClick={addTask} disabled={title.trim() === ""} style={{ ...addBtnStyle, opacity: title.trim() === "" ? 0.5 : 1, cursor: title.trim() === "" ? "not-allowed" : "pointer" }}>
+          <button className="add-btn" onClick={addTask} disabled={title.trim() === ""} style={{ ...addBtnStyle, opacity: title.trim() === "" ? 0.5 : 1, cursor: title.trim() === "" ? "not-allowed" : "pointer", width: "100%" }}>
             + Add Task
           </button>
         </div>
@@ -222,19 +230,18 @@ function TasksPage() {
   );
 }
 
-const pageStyle   = { padding: "24px 20px 48px", boxSizing: "border-box", fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", background: "#f8fafc" };
-const container   = { maxWidth: "800px", margin: "0 auto" };
-const headerRow   = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "22px" };
-const titleStyle  = { fontSize: "32px", fontWeight: "800", color: "#0f172a", margin: "0 0 4px", letterSpacing: "-0.6px" };
+const pageStyle    = { padding: "24px 20px 48px", boxSizing: "border-box", fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", background: "#f8fafc" };
+const container    = { maxWidth: "800px", margin: "0 auto" };
+const headerRow    = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "22px" };
+const titleStyle   = { fontSize: "32px", fontWeight: "800", color: "#0f172a", margin: "0 0 4px", letterSpacing: "-0.6px" };
 const subtitleStyle = { color: "#64748b", fontSize: "15px", margin: 0 };
-const statsRow    = { display: "flex", gap: "10px", alignItems: "center" };
-const statPill    = { background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "baseline", boxShadow: "0 2px 6px rgba(15,23,42,0.05)", fontFamily: "'DM Mono', monospace", fontSize: "18px" };
-const formCard    = { background: "white", borderRadius: "18px", padding: "20px", border: "1.5px solid #e2e8f0", boxShadow: "0 4px 16px rgba(15,23,42,0.07)", marginBottom: "18px" };
-const formGrid    = { display: "grid", gridTemplateColumns: "1fr auto auto", gap: "10px", marginBottom: "12px" };
-const inputStyle  = { padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #e2e8f0", fontSize: "14px", background: "#f8fafc", color: "#0f172a", fontFamily: "'DM Sans', sans-serif", width: "100%", boxSizing: "border-box" };
-const addBtnStyle = { padding: "11px 22px", borderRadius: "10px", border: "none", background: "#2563eb", color: "white", fontWeight: "700", fontSize: "14px", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 12px rgba(37,99,235,0.25)" };
-const filtersRow  = { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "16px" };
-const emptyState  = { textAlign: "center", padding: "50px 20px", background: "white", borderRadius: "16px", border: "1.5px solid #e2e8f0" };
+const statsRow     = { display: "flex", gap: "10px", alignItems: "center" };
+const statPill     = { background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "baseline", boxShadow: "0 2px 6px rgba(15,23,42,0.05)", fontFamily: "'DM Mono', monospace", fontSize: "18px" };
+const formCard     = { background: "white", borderRadius: "18px", padding: "20px", border: "1.5px solid #e2e8f0", boxShadow: "0 4px 16px rgba(15,23,42,0.07)", marginBottom: "18px" };
+const inputStyle   = { padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #e2e8f0", fontSize: "14px", background: "#f8fafc", color: "#0f172a", fontFamily: "'DM Sans', sans-serif", width: "100%", boxSizing: "border-box" };
+const addBtnStyle  = { padding: "11px 22px", borderRadius: "10px", border: "none", background: "#2563eb", color: "white", fontWeight: "700", fontSize: "14px", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 12px rgba(37,99,235,0.25)" };
+const filtersRow   = { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "16px" };
+const emptyState   = { textAlign: "center", padding: "50px 20px", background: "white", borderRadius: "16px", border: "1.5px solid #e2e8f0" };
 const clearDoneBtn = { background: "none", border: "1.5px solid #fecaca", color: "#dc2626", padding: "9px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" };
 
 export default TasksPage;
