@@ -1,14 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-const API = "https://smart-campus-backend-production-bf5e.up.railway.app";
-
-// Simple 6-digit code store (in-memory, resets on refresh)
-// In production this would be on the server
-const pendingCodes = {};
+const API = import.meta.env.VITE_API_URL;
 
 export default function ForgotPassword() {
-  const [step,       setStep]       = useState("email"); // email | code | reset | done
+  const [step,       setStep]       = useState("email");
   const [email,      setEmail]      = useState("");
   const [code,       setCode]       = useState("");
   const [newPass,    setNewPass]    = useState("");
@@ -16,9 +12,8 @@ export default function ForgotPassword() {
   const [showPass,   setShowPass]   = useState(false);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState("");
-  const [sentCode,   setSentCode]   = useState(""); // stored code
+  const [sentCode,   setSentCode]   = useState("");
 
-  // Password strength
   const strength = (() => {
     if (!newPass) return 0;
     let s = 0;
@@ -32,34 +27,25 @@ export default function ForgotPassword() {
   const strengthLabel = ["","Weak","Fair","Good","Strong"][strength];
   const strengthColor = ["","#ef4444","#f59e0b","#3b82f6","#22c55e"][strength];
 
-  // Step 1: Send code
   const handleSendCode = async () => {
     if (!email.trim()) { setError("Please enter your email."); return; }
     if (!/\S+@\S+\.\S+/.test(email)) { setError("Enter a valid email."); return; }
     setError(""); setLoading(true);
     try {
-      // Try to call backend reset endpoint
       await fetch(`${API}/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-    } catch { /* ignore — we generate code client-side as fallback */ }
+    } catch {  }
 
-    // Generate 6-digit code (client-side for now)
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setSentCode(code);
-    pendingCodes[email.toLowerCase()] = code;
-
-    // Try to send email via emailjs or just show it (demo mode)
-    // For now: show code in UI (in production, backend sends it)
-    console.log(`Reset code for ${email}: ${code}`);
+    const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+    setSentCode(generatedCode);
 
     setStep("code");
     setLoading(false);
   };
 
-  // Step 2: Verify code
   const handleVerifyCode = () => {
     if (!code.trim()) { setError("Enter the code."); return; }
     if (code !== sentCode) { setError("Incorrect code. Try again."); return; }
@@ -67,7 +53,6 @@ export default function ForgotPassword() {
     setStep("reset");
   };
 
-  // Step 3: Reset password
   const handleReset = async () => {
     if (newPass.length < 6) { setError("Password must be at least 6 characters."); return; }
     if (newPass !== confirmP) { setError("Passwords do not match."); return; }
@@ -79,7 +64,7 @@ export default function ForgotPassword() {
         body: JSON.stringify({ email, newPassword: newPass }),
       });
       if (!res.ok) throw new Error();
-    } catch { /* if backend doesn't support it yet, still show success */ }
+    } catch {  }
     setStep("done");
     setLoading(false);
   };
@@ -87,7 +72,7 @@ export default function ForgotPassword() {
   return (
     <div style={page}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+        @import url('https:
         *{box-sizing:border-box}body{margin:0}
         .fp-dots{position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(circle,rgba(255,255,255,0.06) 1px,transparent 1px);background-size:28px 28px;z-index:0}
         .fp-input:focus{outline:none;border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,0.15)!important;background:white!important}
@@ -104,7 +89,6 @@ export default function ForgotPassword() {
         .fp-card{animation:fadeUp 0.4s ease}
         @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
         .fp-shake{animation:shake 0.4s ease}
-        .fp-code-input{font-family:'DM Mono',monospace!important;letter-spacing:0.3em!important;font-size:22px!important;text-align:center!important}
         .fp-back{color:#64748b;font-size:13px;font-weight:600;text-decoration:none;transition:color 0.15s}
         .fp-back:hover{color:#0f172a}
       `}</style>
@@ -117,10 +101,9 @@ export default function ForgotPassword() {
 
         <Link to="/login" className="fp-back">← Back to Login</Link>
 
-        {/* Logo */}
         <div style={logoBox}>SC</div>
 
-        {/* ── Step: Email ── */}
+        {}
         {step === "email" && (
           <>
             <h1 style={title}>Forgot Password?</h1>
@@ -134,7 +117,7 @@ export default function ForgotPassword() {
                 className={`fp-input${error ? " err" : ""}`}
                 style={inp}
                 type="email"
-                placeholder="you@university.edu"
+                placeholder="you@iau.edu.sa"
                 value={email}
                 onChange={e => { setEmail(e.target.value); setError(""); }}
                 onKeyDown={e => e.key === "Enter" && handleSendCode()}
@@ -148,19 +131,18 @@ export default function ForgotPassword() {
           </>
         )}
 
-        {/* ── Step: Code ── */}
+        {}
         {step === "code" && (
           <>
             <h1 style={title}>Enter Code</h1>
             <p style={subtitle}>
               We sent a 6-digit code to <strong>{email}</strong>
               <br/>
-              <span style={{fontSize:"12px",color:"#94a3b8"}}>(Check your email — or see browser console in demo mode)</span>
+              <span style={{fontSize:"12px",color:"#94a3b8"}}>(Demo mode — code shown below)</span>
             </p>
 
             {error && <div className="fp-shake" style={errBox}>⚠️ {error}</div>}
 
-            {/* Demo: show code */}
             {sentCode && (
               <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:"10px",padding:"10px 14px",fontSize:"13px",color:"#166534",fontWeight:"600",marginBottom:"16px",textAlign:"center"}}>
                 🔐 Demo Code: <strong style={{fontSize:"18px",letterSpacing:"0.2em"}}>{sentCode}</strong>
@@ -170,8 +152,8 @@ export default function ForgotPassword() {
             <div style={fieldGrp}>
               <label style={lbl}>6-Digit Code</label>
               <input
-                className={`fp-input fp-code-input${error ? " err" : ""}`}
-                style={{...inp, textAlign:"center", fontSize:"22px", letterSpacing:"0.3em", fontFamily:"'DM Mono',monospace"}}
+                className={`fp-input${error ? " err" : ""}`}
+                style={{...inp, textAlign:"center", fontSize:"22px", letterSpacing:"0.3em"}}
                 type="text"
                 placeholder="000000"
                 value={code}
@@ -185,14 +167,13 @@ export default function ForgotPassword() {
             <button className="fp-btn" style={submitBtn("#2563eb")} onClick={handleVerifyCode}>
               Verify Code →
             </button>
-
             <button style={{...submitBtn("#f1f5f9"), color:"#475569", marginTop:"8px", boxShadow:"none"}} onClick={() => { setStep("email"); setError(""); }} className="fp-btn">
               ← Try Different Email
             </button>
           </>
         )}
 
-        {/* ── Step: New Password ── */}
+        {}
         {step === "reset" && (
           <>
             <h1 style={title}>New Password</h1>
@@ -249,7 +230,7 @@ export default function ForgotPassword() {
           </>
         )}
 
-        {/* ── Step: Done ── */}
+        {}
         {step === "done" && (
           <div style={{textAlign:"center",padding:"16px 0"}}>
             <div style={{fontSize:"52px",marginBottom:"16px"}}>🎉</div>
@@ -270,7 +251,6 @@ export default function ForgotPassword() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const page = { minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"linear-gradient(155deg,#f8fafc 0%,#eff6ff 50%,#f5f3ff 100%)", padding:"24px", fontFamily:"'DM Sans',system-ui,sans-serif", position:"relative", overflow:"hidden" };
 const card = { position:"relative", zIndex:1, width:"100%", maxWidth:"420px", background:"white", borderRadius:"22px", padding:"36px 32px", border:"1.5px solid #e2e8f0", boxShadow:"0 16px 48px rgba(15,23,42,0.10)" };
 const logoBox = { width:"48px", height:"48px", borderRadius:"13px", background:"linear-gradient(135deg,#2563eb,#1d4ed8)", color:"white", fontWeight:"800", fontSize:"18px", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 6px 18px rgba(37,99,235,0.32)", marginBottom:"18px", marginTop:"16px" };
