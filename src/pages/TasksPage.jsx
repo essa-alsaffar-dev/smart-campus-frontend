@@ -10,6 +10,8 @@ const priorityConfig = {
 };
 
 function TasksPage() {
+  const theme = localStorage.getItem("sc-theme") || "light";
+
   const [tasks,          setTasks]          = useState([]);
   const [title,          setTitle]          = useState("");
   const [priority,       setPriority]       = useState("Medium");
@@ -29,7 +31,6 @@ function TasksPage() {
 
   const saveTasks = (updated) => {
     setTasks(updated);
-    localStorage.setItem(`tasks_v2_${localStorage.getItem("userName") || "guest"}`, JSON.stringify(updated));
   };
 
   const showSuccess = (msg) => {
@@ -55,13 +56,13 @@ function TasksPage() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     if (!task.completed) {
-      try { await api.patch(`/tasks/${id}/complete`, {}); } catch {}
+      try { await api.patch(`/tasks/${id}/complete`, {}); } catch { /* best-effort */ }
     }
     setTasks(p => p.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
   };
 
   const deleteTask = async (id) => {
-    try { await api.delete(`/tasks/${id}`); } catch {}
+    try { await api.delete(`/tasks/${id}`); } catch { /* best-effort */ }
     setTasks(p => p.filter(t => t.id !== id));
     showSuccess("Task deleted.");
   };
@@ -84,37 +85,50 @@ function TasksPage() {
   const formatDate = (dateStr) => dateStr ? new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
 
   return (
-    <div style={pageStyle}>
+    <div data-theme={theme} style={pageStyle}>
       <style>{`
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
+[data-theme="light"] {
+  --tp-bg: #f4f6fb; --tp-card: #ffffff; --tp-muted: #f1f5f9; --tp-muted2: #e8edf5;
+  --tp-border: #e2e8f0; --tp-border2: #edf0f7;
+  --tp-text: #0a0f1e; --tp-text-2: #3d4f6e; --tp-text-3: #8596b0;
+  --tp-shadow: 0 1px 4px rgba(10,15,30,0.05),0 2px 12px rgba(10,15,30,0.04);
+  --tp-shadow-lg: 0 4px 20px rgba(10,15,30,0.09);
+  --tp-input-bg: #f8fafc;
+}
+[data-theme="dark"] {
+  --tp-bg: #060b14; --tp-card: #0c1322; --tp-muted: #101a2e; --tp-muted2: #152036;
+  --tp-border: rgba(255,255,255,0.09); --tp-border2: rgba(255,255,255,0.05);
+  --tp-text: #eef2f8; --tp-text-2: #8599b8; --tp-text-3: #4e6380;
+  --tp-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  --tp-shadow-lg: 0 6px 24px rgba(0,0,0,0.4);
+  --tp-input-bg: #0f1929;
+}
 * { box-sizing: border-box; }
-.task-input:focus, .task-select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); background: white !important; }
+.task-input:focus, .task-select:focus { outline: none; border-color: #4f6ef7 !important; box-shadow: 0 0 0 3px rgba(79,110,247,0.14) !important; background: var(--tp-card) !important; }
 .add-btn { transition: filter 0.15s, transform 0.1s, box-shadow 0.15s; }
-.add-btn:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 8px 22px rgba(37,99,235,0.35); }
+.add-btn:hover:not(:disabled) { filter: brightness(1.10); box-shadow: 0 8px 24px rgba(79,110,247,0.38) !important; }
 .add-btn:active:not(:disabled) { transform: scale(0.97); }
-.add-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.task-card { background: white; border-radius: 14px; padding: 16px 18px; border: 1.5px solid #f1f5f9; border-left: 4px solid transparent; display: flex; align-items: flex-start; gap: 14px; transition: box-shadow 0.18s, transform 0.15s; }
-.task-card:hover { box-shadow: 0 6px 20px rgba(15,23,42,0.09); transform: translateY(-1px); }
-.task-card.completed { opacity: 0.55; background: #f8fafc; }
-.check-btn { width: 22px; height: 22px; border-radius: 7px; border: 2px solid #cbd5e1; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px; transition: background 0.15s, border-color 0.15s, transform 0.1s; }
-.check-btn:hover { border-color: #2563eb; transform: scale(1.08); }
+.add-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.task-card { background: var(--tp-card); border-radius: 15px; padding: 16px 18px; border: 1px solid var(--tp-border); border-left: 4px solid transparent; display: flex; align-items: flex-start; gap: 14px; transition: box-shadow 0.18s, transform 0.15s; }
+.task-card:hover { box-shadow: var(--tp-shadow-lg); transform: translateY(-1px); }
+.task-card.completed { opacity: 0.5; background: var(--tp-muted); }
+.check-btn { width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--tp-border); background: var(--tp-card); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px; transition: background 0.15s, border-color 0.15s, transform 0.1s; }
+.check-btn:hover { border-color: #4f6ef7; transform: scale(1.08); }
 .check-btn.done { background: #22c55e; border-color: #22c55e; color: white; }
-.delete-btn { background: none; border: none; cursor: pointer; color: #cbd5e1; font-size: 16px; padding: 3px 6px; border-radius: 6px; transition: color 0.15s, background 0.15s; flex-shrink: 0; line-height: 1; }
-.delete-btn:hover { color: #ef4444; background: #fef2f2; }
-.filter-chip { padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1.5px solid #e2e8f0; background: white; cursor: pointer; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
-.filter-chip:hover { border-color: #2563eb; color: #2563eb; }
-.filter-chip.active { background: #2563eb; color: white; border-color: #2563eb; box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
-.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #0f172a; color: white; padding: 12px 22px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.18); z-index: 9999; white-space: nowrap; animation: fadeInUp 0.25s ease; }
+.delete-btn { background: none; border: none; cursor: pointer; color: var(--tp-text-3); font-size: 16px; padding: 3px 6px; border-radius: 6px; transition: color 0.15s, background 0.15s; flex-shrink: 0; line-height: 1; }
+.delete-btn:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+.filter-chip { padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1.5px solid var(--tp-border); background: var(--tp-card); color: var(--tp-text-2); cursor: pointer; transition: all 0.15s; font-family: 'Inter','DM Sans',sans-serif; letter-spacing: -0.1px; }
+.filter-chip:hover { border-color: #4f6ef7; color: #4f6ef7; }
+.filter-chip.active { background: #4f6ef7; color: white; border-color: #4f6ef7; box-shadow: 0 4px 14px rgba(79,110,247,0.3); }
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #0f172a; color: white; padding: 12px 24px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: 0 8px 28px rgba(0,0,0,0.22); z-index: 9999; white-space: nowrap; animation: fadeInUp 0.25s ease; }
+[data-theme="dark"] .toast { background: #1e293b; border: 1px solid rgba(255,255,255,0.1); }
 @keyframes fadeInUp { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 .task-entry { animation: slideIn 0.2s ease both; }
-
-/* ── Mobile form grid fix ── */
 .task-form-grid { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; margin-bottom: 12px; }
 @media (max-width: 520px) {
   .task-form-grid { grid-template-columns: 1fr; }
-  .task-form-grid input[type="date"],
-  .task-form-grid select { width: 100%; }
+  .task-form-grid input[type="date"], .task-form-grid select { width: 100%; }
 }
       `}</style>
 
@@ -175,8 +189,8 @@ function TasksPage() {
         {filteredTasks.length === 0 ? (
           <div style={emptyState}>
             <div style={{ fontSize: "44px", marginBottom: "12px" }}>{tasks.length === 0 ? "📋" : "✅"}</div>
-            <p style={{ fontWeight: "700", fontSize: "18px", color: "#0f172a", margin: "0 0 6px" }}>{tasks.length === 0 ? "No tasks yet" : "No tasks match this filter"}</p>
-            <p style={{ color: "#64748b", margin: 0 }}>{tasks.length === 0 ? "Add your first task above." : "Try switching the filter."}</p>
+            <p style={{ fontWeight: "700", fontSize: "18px", color: "var(--tp-text)", margin: "0 0 6px" }}>{tasks.length === 0 ? "No tasks yet" : "No tasks match this filter"}</p>
+            <p style={{ color: "var(--tp-text-3)", margin: 0 }}>{tasks.length === 0 ? "Add your first task above." : "Try switching the filter."}</p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -189,7 +203,7 @@ function TasksPage() {
                     {task.completed && "✓"}
                   </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: "600", fontSize: "15px", color: task.completed ? "#94a3b8" : "#0f172a", textDecoration: task.completed ? "line-through" : "none", marginBottom: "6px", wordBreak: "break-word" }}>
+                    <div style={{ fontWeight: "600", fontSize: "15px", color: task.completed ? "var(--tp-text-3)" : "var(--tp-text)", textDecoration: task.completed ? "line-through" : "none", marginBottom: "6px", wordBreak: "break-word" }}>
                       {task.title}
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
@@ -230,18 +244,18 @@ function TasksPage() {
   );
 }
 
-const pageStyle    = { padding: "24px 20px 48px", boxSizing: "border-box", fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", background: "#f8fafc" };
-const container    = { maxWidth: "800px", margin: "0 auto" };
-const headerRow    = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "22px" };
-const titleStyle   = { fontSize: "32px", fontWeight: "800", color: "#0f172a", margin: "0 0 4px", letterSpacing: "-0.6px" };
-const subtitleStyle = { color: "#64748b", fontSize: "15px", margin: 0 };
+const pageStyle    = { padding: "24px 20px 48px", boxSizing: "border-box", fontFamily: "'Inter','DM Sans',sans-serif", minHeight: "100vh", background: "var(--tp-bg)" };
+const container    = { maxWidth: "820px", margin: "0 auto" };
+const headerRow    = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "24px" };
+const titleStyle   = { fontSize: "30px", fontWeight: "800", color: "var(--tp-text)", margin: "0 0 4px", letterSpacing: "-0.6px" };
+const subtitleStyle = { color: "var(--tp-text-3)", fontSize: "14.5px", margin: 0 };
 const statsRow     = { display: "flex", gap: "10px", alignItems: "center" };
-const statPill     = { background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "baseline", boxShadow: "0 2px 6px rgba(15,23,42,0.05)", fontFamily: "'DM Mono', monospace", fontSize: "18px" };
-const formCard     = { background: "white", borderRadius: "18px", padding: "20px", border: "1.5px solid #e2e8f0", boxShadow: "0 4px 16px rgba(15,23,42,0.07)", marginBottom: "18px" };
-const inputStyle   = { padding: "11px 14px", borderRadius: "10px", border: "1.5px solid #e2e8f0", fontSize: "14px", background: "#f8fafc", color: "#0f172a", fontFamily: "'DM Sans', sans-serif", width: "100%", boxSizing: "border-box" };
-const addBtnStyle  = { padding: "11px 22px", borderRadius: "10px", border: "none", background: "#2563eb", color: "white", fontWeight: "700", fontSize: "14px", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 12px rgba(37,99,235,0.25)" };
+const statPill     = { background: "var(--tp-card)", border: "1px solid var(--tp-border)", borderRadius: "12px", padding: "10px 16px", display: "flex", alignItems: "baseline", boxShadow: "var(--tp-shadow)", fontFamily: "'Inter','DM Mono',monospace", fontSize: "18px" };
+const formCard     = { background: "var(--tp-card)", borderRadius: "18px", padding: "20px", border: "1px solid var(--tp-border)", boxShadow: "var(--tp-shadow)", marginBottom: "18px" };
+const inputStyle   = { padding: "11px 14px", borderRadius: "10px", border: "1.5px solid var(--tp-border)", fontSize: "14px", background: "var(--tp-input-bg)", color: "var(--tp-text)", fontFamily: "'Inter','DM Sans',sans-serif", width: "100%", boxSizing: "border-box" };
+const addBtnStyle  = { padding: "11px 22px", borderRadius: "11px", border: "none", background: "linear-gradient(135deg,#4f6ef7,#7c3aed)", color: "white", fontWeight: "700", fontSize: "14px", fontFamily: "'Inter','DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(79,110,247,0.3)", letterSpacing: "-0.1px" };
 const filtersRow   = { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginBottom: "16px" };
-const emptyState   = { textAlign: "center", padding: "50px 20px", background: "white", borderRadius: "16px", border: "1.5px solid #e2e8f0" };
-const clearDoneBtn = { background: "none", border: "1.5px solid #fecaca", color: "#dc2626", padding: "9px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" };
+const emptyState   = { textAlign: "center", padding: "52px 20px", background: "var(--tp-card)", borderRadius: "18px", border: "1px solid var(--tp-border)" };
+const clearDoneBtn = { background: "none", border: "1.5px solid rgba(239,68,68,0.3)", color: "#ef4444", padding: "9px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer", fontFamily: "'Inter','DM Sans',sans-serif" };
 
 export default TasksPage;

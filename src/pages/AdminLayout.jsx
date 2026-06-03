@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 
 const ADMIN_NAV = [
   { path: "/admin/parking", label: "Parking Control", icon: "🅿" },
@@ -21,7 +21,6 @@ export default function AdminLayout() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
         * { box-sizing: border-box; }
 
         .adm-layout { display:flex; min-height:100vh; background:#f1f5f9; font-family:'DM Sans',system-ui,sans-serif; }
@@ -81,15 +80,15 @@ export default function AdminLayout() {
 
             <nav>
               {ADMIN_NAV.map(({ path, label, icon }) => (
-                <a
+                <Link
                   key={path}
-                  href={path}
+                  to={path}
                   className={`adm-nav-link${location.pathname === path ? " active" : ""}`}
                   onClick={closeSidebar}
                 >
                   <i className="adm-nav-icon">{icon}</i>
                   <span>{label}</span>
-                </a>
+                </Link>
               ))}
             </nav>
           </div>

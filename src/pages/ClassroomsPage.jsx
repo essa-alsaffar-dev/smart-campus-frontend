@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 const classroomsData = [
-// Lobby
+
 { name: "1004", department: "Lobby", floor: "2", building: "A11" },
 { name: "1010", department: "Lobby", floor: "2", building: "A11" },
 { name: "1011", department: "Lobby", floor: "2", building: "A11" },
@@ -30,7 +30,6 @@ const classroomsData = [
 { name: "G032", department: "Lobby", floor: "1", building: "A11" },
 { name: "G034", department: "Lobby", floor: "1", building: "A11" },
 
-// Computer Science
 { name: "1159", department: "Computer Science", floor: "2", building: "A11" },
 { name: "1160", department: "Computer Science", floor: "2", building: "A11" },
 { name: "1161", department: "Computer Science", floor: "2", building: "A11" },
@@ -62,7 +61,6 @@ const classroomsData = [
 { name: "F1193", department: "Computer Science", floor: "2", building: "A11" },
 { name: "F1199", department: "Computer Science", floor: "2", building: "A11" },
 
-// Computer Engineering
 { name: "1058", department: "Computer Engineering", floor: "2", building: "A11" },
 { name: "1073", department: "Computer Engineering", floor: "2", building: "A11" },
 { name: "1074", department: "Computer Engineering", floor: "2", building: "A11" },
@@ -87,7 +85,6 @@ const classroomsData = [
 { name: "1186", department: "Computer Engineering", floor: "2", building: "A11" },
 { name: "F1060", department: "Computer Engineering", floor: "2", building: "A11" },
 
-// Information Systems
 { name: "1099", department: "Information Systems", floor: "2", building: "A11" },
 { name: "1100", department: "Information Systems", floor: "2", building: "A11" },
 { name: "1102", department: "Information Systems", floor: "2", building: "A11" },
@@ -120,7 +117,6 @@ const classroomsData = [
 { name: "F1133", department: "Information Systems", floor: "2", building: "A11" },
 { name: "F1139", department: "Information Systems", floor: "2", building: "A11" },
 
-// Networks and Communications
 { name: "1209", department: "Networks and Communications", floor: "2", building: "A11" },
 { name: "1210", department: "Networks and Communications", floor: "2", building: "A11" },
 { name: "1211", department: "Networks and Communications", floor: "2", building: "A11" },
@@ -145,7 +141,6 @@ const classroomsData = [
 { name: "1233", department: "Networks and Communications", floor: "2", building: "A11" },
 { name: "1250", department: "Networks and Communications", floor: "2", building: "A11" },
 
-// Lab 1
 { name: "G102", department: "Lab 1", floor: "1", building: "A11" },
 { name: "G112", department: "Lab 1", floor: "1", building: "A11" },
 { name: "G116", department: "Lab 1", floor: "1", building: "A11" },
@@ -157,7 +152,6 @@ const classroomsData = [
 { name: "G133", department: "Lab 1", floor: "1", building: "A11" },
 { name: "G139", department: "Lab 1", floor: "1", building: "A11" },
 
-// Lab 3
 { name: "G161", department: "Lab 3", floor: "1", building: "A11" },
 { name: "G172", department: "Lab 3", floor: "1", building: "A11" },
 { name: "G175", department: "Lab 3", floor: "1", building: "A11" },
@@ -174,7 +168,6 @@ const classroomsData = [
 { name: "G196", department: "Lab 3", floor: "1", building: "A11" },
 { name: "G199", department: "Lab 3", floor: "1", building: "A11" },
 
-// Lab 4
 { name: "1152", department: "Lab 4", floor: "2", building: "A11" },
 { name: "1175", department: "Lab 4", floor: "2", building: "A11" },
 { name: "F1140", department: "Lab 4", floor: "2", building: "A11" },
@@ -182,12 +175,10 @@ const classroomsData = [
 { name: "F1151", department: "Lab 4", floor: "2", building: "A11" },
 { name: "F1154", department: "Lab 4", floor: "2", building: "A11" },
 
-// Student Affairs Unit
 { name: "G060", department: "Student Affairs Unit", floor: "1", building: "A11" },
 { name: "G069", department: "Student Affairs Unit", floor: "1", building: "A11" },
 ];
 
-// Department config: color accent + icon
 const deptConfig = {
   "Lobby": { color: "#6366f1", bg: "#eef2ff", icon: "🏛" },
   "Computer Science": { color: "#2563eb", bg: "#eff6ff", icon: "💻" },
@@ -220,11 +211,6 @@ function ClassroomsPage() {
     "All Departments",
     ...new Set(classroomsData.map((item) => item.department)),
   ], []);
-
-  const floors = useMemo(() => [
-    "All Floors",
-    ...new Set(classroomsData.map((item) => item.floor)).values(),
-  ].sort(), []);
 
   const filteredRooms = useMemo(() => {
     return classroomsData.filter((room) => {
@@ -260,8 +246,6 @@ function ClassroomsPage() {
   return (
     <div style={pageStyle}>
       <style>{`
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@500&display=swap');
-
 .room-card {
   background: white;
   border-radius: 16px;
@@ -307,7 +291,7 @@ function ClassroomsPage() {
       `}</style>
 
       <div style={container}>
-        {/* Header */}
+
         <div style={headerRow}>
           <div>
             <h1 style={title}>Classroom Finder</h1>
@@ -319,7 +303,6 @@ function ClassroomsPage() {
           </div>
         </div>
 
-        {/* Data Credit Banner */}
         <div style={creditBanner}>
           <span style={{ fontSize:"16px" }}>🙏</span>
           <div>
@@ -343,7 +326,6 @@ function ClassroomsPage() {
           </div>
         </div>
 
-        {/* Search & Filters */}
         <div style={filterCard}>
           <div style={searchWrapper}>
             <span style={searchIcon}>🔍</span>
@@ -398,7 +380,6 @@ function ClassroomsPage() {
           </div>
         </div>
 
-        {/* Dept chips */}
         <div style={chipsRow}>
           {departments.slice(1).map((dept) => {
             const cfg = deptConfig[dept] || { color: "#64748b", bg: "#f8fafc", icon: "🏠" };
@@ -429,7 +410,6 @@ function ClassroomsPage() {
           })}
         </div>
 
-        {/* Results */}
         {filteredRooms.length === 0 ? (
           <div style={emptyState}>
             <div style={emptyIcon}>🔎</div>
@@ -446,10 +426,9 @@ function ClassroomsPage() {
               const isCopied = copiedRoom === room.name;
               return (
                 <div key={index} className="room-card">
-                  {/* Top accent bar */}
+
                   <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "3px", background: cfg.color, borderRadius: "16px 16px 0 0" }} />
 
-                  {/* Badge row */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", marginTop: "4px" }}>
                     <div style={{
                       display: "inline-flex",
@@ -475,7 +454,6 @@ function ClassroomsPage() {
                     </span>
                   </div>
 
-                  {/* Room number */}
                   <div style={{
                     fontFamily: "'DM Mono', monospace",
                     fontSize: "32px",
@@ -487,7 +465,6 @@ function ClassroomsPage() {
                     {room.name}
                   </div>
 
-                  {/* Meta */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginBottom: "16px" }}>
                     <div style={metaRow}>
                       <span style={metaLabel}>Building</span>
@@ -499,7 +476,6 @@ function ClassroomsPage() {
                     </div>
                   </div>
 
-                  {/* Share button */}
                   <button
                     className="share-btn"
                     onClick={() => handleShare(room)}
@@ -536,7 +512,6 @@ function ClassroomsPage() {
   );
 }
 
-// Styles
 const pageStyle = {
   padding: "24px 20px 40px",
   boxSizing: "border-box",
@@ -712,7 +687,6 @@ const metaValue = {
   fontWeight: "600",
 };
 
-// Empty state
 const emptyState = {
   textAlign: "center",
   padding: "60px 20px",

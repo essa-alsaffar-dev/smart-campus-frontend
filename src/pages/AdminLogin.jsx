@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-// ╔══════════════════════════════════════════════════════════╗
-// ║  SECRET ADMIN KEY — Change this to whatever you want     ║
-// ║  Keep it private — do not share this file publicly       ║
-// ╚══════════════════════════════════════════════════════════╝
 const ADMIN_SECRET_KEY = "SC@Admin#2025!IAU";
 
 export default function AdminLogin() {
@@ -41,9 +37,7 @@ export default function AdminLogin() {
   return (
     <div style={page}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
         *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; }
         .adm-dots { position: fixed; inset: 0; pointer-events: none; background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px); background-size: 28px 28px; z-index: 0; }
         .adm-key:focus { outline: none; border-color: #f59e0b !important; box-shadow: 0 0 0 3px rgba(245,158,11,0.18) !important; background: rgba(255,255,255,0.09) !important; }
         .adm-key.err { border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,0.15) !important; }
@@ -78,7 +72,6 @@ export default function AdminLogin() {
         <h1 style={titleSt}>Admin Access</h1>
         <p style={subtitleSt}>Enter the administrator key to access the control panel.</p>
 
-        {/* Attempt dots */}
         <div style={{ display:"flex", gap:"6px", marginBottom:"16px" }}>
           {[1,2,3,4,5].map((i) => (
             <div key={i} style={{ width:8, height:8, borderRadius:"50%", transition:"background 0.2s", background: i <= attempts ? "#ef4444" : "rgba(255,255,255,0.15)" }} />

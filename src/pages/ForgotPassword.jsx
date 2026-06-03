@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import emailjs from "@emailjs/browser";
+import api from "../api/api";
 
 const SERVICE_ID  = "service_wneun8k";
 const TEMPLATE_ID = "template_gtvvu0j";
 const PUBLIC_KEY  = "-LMLnwPKBDwExJXro";
-const API = import.meta.env.VITE_API_URL;
 
 export default function ForgotPassword() {
   const [step,     setStep]     = useState("email");
@@ -61,25 +61,23 @@ export default function ForgotPassword() {
   };
 
   const handleReset = async () => {
-    if (newPass.length < 6) { setError("Password must be at least 6 characters."); return; }
-    if (newPass !== confirmP) { setError("Passwords do not match."); return; }
+    if (newPass.length < 6)    { setError("Password must be at least 6 characters."); return; }
+    if (newPass !== confirmP)  { setError("Passwords do not match."); return; }
     setError(""); setLoading(true);
     try {
-      await fetch(`${API}/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, newPassword: newPass }),
-      });
-    } catch { }
+      await api.post("/auth/reset-password", { email, newPassword: newPass });
+    } catch {
+
+    } finally {
+      setLoading(false);
+    }
     setStep("done");
-    setLoading(false);
   };
 
   return (
     <div style={page}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-        *{box-sizing:border-box}body{margin:0}
+        *{box-sizing:border-box}
         .fp-input:focus{outline:none;border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,0.15)!important;background:white!important}
         .fp-input.err{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,0.12)!important}
         .fp-btn{transition:filter 0.15s,transform 0.1s;cursor:pointer}

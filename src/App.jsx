@@ -16,11 +16,12 @@ import AdminParkingPage from "./pages/AdminParkingPage";
 import ProfilePage      from "./pages/ProfilePage";
 import AboutPage       from "./pages/AboutPage";
 import ForgotPassword  from "./pages/ForgotPassword";
+import ScheduleImportLab from "./pages/ScheduleImportLab";
 
 function App() {
   return (
     <Routes>
-      {/* Public */}
+
       <Route path="/"            element={<Home />}       />
       <Route path="/login"       element={<Login />}      />
       <Route path="/register"    element={<Register />}   />
@@ -28,7 +29,6 @@ function App() {
       <Route path="/about"          element={<AboutPage />}      />
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
-      {/* Student routes */}
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/dashboard"  element={<Dashboard />}     />
         <Route path="/tasks"      element={<TasksPage />}      />
@@ -36,9 +36,10 @@ function App() {
         <Route path="/parking"    element={<ParkingPage />}    />
         <Route path="/classrooms" element={<ClassroomsPage />} />
         <Route path="/profile"    element={<ProfilePage />}    />
+
+        <Route path="/schedule-import-lab" element={<ScheduleImportLab />} />
       </Route>
 
-      {/* Admin routes */}
       <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
         <Route path="/admin/parking" element={<AdminParkingPage />} />
       </Route>

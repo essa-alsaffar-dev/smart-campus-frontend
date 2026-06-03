@@ -36,9 +36,7 @@ export default function AboutPage() {
   return (
     <div style={page}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
         *, *::before, *::after { box-sizing: border-box; }
-        body { margin: 0; }
 
         .ab-nav-btn { transition: background 0.15s, color 0.15s; }
         .ab-nav-btn:hover { background: rgba(255,255,255,0.12) !important; }
@@ -65,7 +63,6 @@ export default function AboutPage() {
         .ab-dots { position:absolute; inset:0; background-image:radial-gradient(circle,rgba(255,255,255,0.08) 1px,transparent 1px); background-size:28px 28px; pointer-events:none; }
       `}</style>
 
-      {/* ── Navbar ── */}
       <nav style={navbar}>
         <div style={navInner}>
           <div style={navBrand} onClick={() => navigate("/")} role="button" tabIndex={0}>
@@ -79,14 +76,13 @@ export default function AboutPage() {
         </div>
       </nav>
 
-      {/* ── Hero ── */}
       <section style={hero}>
         <div className="ab-dots" />
         <div style={{ position:"absolute", top:"10%", right:"8%", width:280, height:280, borderRadius:"50%", background:"#2563eb", opacity:0.10, filter:"blur(70px)", pointerEvents:"none" }} />
         <div style={{ position:"absolute", bottom:"5%", left:"5%", width:200, height:200, borderRadius:"50%", background:"#9333ea", opacity:0.10, filter:"blur(60px)", pointerEvents:"none" }} />
 
         <div style={heroInner}>
-          {/* Avatar */}
+
           <div className="ab-avatar-float ab-f1" style={avatarWrap}>
             <div style={avatarRing}>
               <div style={avatarInner}>👨‍💻</div>
@@ -99,7 +95,6 @@ export default function AboutPage() {
 
           <p className="ab-f3" style={heroBio}>{DEVELOPER.bio}</p>
 
-          {/* Contact buttons */}
           <div className="ab-f4" style={contactRow}>
             <a href={DEVELOPER.linkedin} target="_blank" rel="noopener noreferrer" className="ab-contact-btn" style={contactBtn("#0a66c2")}>
               <span>in</span>
@@ -117,7 +112,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── About the project ── */}
       <section style={section("#f8fafc")}>
         <div style={sectionInner}>
           <div style={sectionHead}>
@@ -142,7 +136,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Features ── */}
       <section style={section("white")}>
         <div style={sectionInner}>
           <div style={sectionHead}>
@@ -161,7 +154,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Tech Stack ── */}
       <section style={section("#f8fafc")}>
         <div style={sectionInner}>
           <div style={sectionHead}>
@@ -178,7 +170,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Contact ── */}
       <section style={{ ...section("linear-gradient(155deg,#0f172a,#1e3a5f)"), position:"relative", overflow:"hidden" }}>
         <div className="ab-dots" />
         <div style={{ ...sectionInner, textAlign:"center", position:"relative", zIndex:1 }}>
@@ -200,10 +191,9 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ── Footer ── */}
       <footer style={footer}>
         <span style={{ color:"#94a3b8", fontSize:"13px" }}>
-          © 2025 Smart Campus · Built by{" "}
+          © {new Date().getFullYear()} Smart Campus · Built by{" "}
           <a href={DEVELOPER.linkedin} target="_blank" rel="noopener noreferrer" style={{ color:"#2563eb", fontWeight:"700", textDecoration:"none" }}>
             Essa Abbas Al-Saffar
           </a>
@@ -215,7 +205,6 @@ export default function AboutPage() {
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────────────────────
 const page    = { fontFamily:"'DM Sans',system-ui,sans-serif", background:"#f8fafc", minHeight:"100vh" };
 
 const navbar  = { position:"sticky", top:0, zIndex:100, background:"rgba(255,255,255,0.90)", backdropFilter:"blur(12px)", borderBottom:"1px solid #e2e8f0" };

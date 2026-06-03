@@ -42,8 +42,12 @@ export default function Login() {
       }
 
       navigate("/dashboard");
-    } catch {
-      setError("Incorrect email or password. Please try again.");
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+        err.message ||
+        "Login failed"
+      );
     } finally {
       setLoading(false);
     }

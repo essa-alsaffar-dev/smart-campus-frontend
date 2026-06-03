@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import api from "../api/api";
 
 const getStatusColor = (pct) => {
@@ -34,12 +34,10 @@ export default function ParkingPage() {
   const [confirmLeave,      setConfirmLeave]      = useState(false);
   const [autoReleasePrompt, setAutoReleasePrompt] = useState(false);
 
-  const schedule = useMemo(() => {
-    const saved = localStorage.getItem(`schedule_${localStorage.getItem("userEmail") || localStorage.getItem("userName") || "guest"}`);
-    return saved ? JSON.parse(saved) : [];
-  }, []);
+  const [schedule, setSchedule] = useState([]);
+  const prevSessionRef = useRef(null);
+  const manualCheckoutRef = useRef(false);
 
-  // ── Load zones + my session from backend ──
   const loadData = useCallback(async () => {
     try {
       const [zonesRes, sessionRes] = await Promise.allSettled([
@@ -53,6 +51,12 @@ export default function ParkingPage() {
 
       if (sessionRes.status === "fulfilled") {
         const data = sessionRes.value.data;
+        if (prevSessionRef.current && !data.active && !manualCheckoutRef.current) {
+          setToast("Your parking session ended automatically.");
+          setTimeout(() => setToast(""), 4000);
+        }
+        manualCheckoutRef.current = false;
+        prevSessionRef.current = data.active ? data : null;
         setMySession(data.active ? data : null);
       }
     } catch (err) {
@@ -68,7 +72,21 @@ export default function ParkingPage() {
     return () => clearInterval(id);
   }, [loadData]);
 
-  // ── Auto-release prompt ──
+  useEffect(() => {
+    api.get("/schedule")
+      .then(r => {
+        if (Array.isArray(r.data)) {
+          setSchedule(r.data.map(e => ({
+            courseName: e.courseName,
+            day: e.dayOfWeek || e.day,
+            startTime: e.startTime,
+            endTime: e.endTime,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!mySession?.endTime) return;
     const check = () => {
@@ -86,18 +104,22 @@ export default function ParkingPage() {
     setTimeout(() => setToast(""), 2800);
   };
 
-  // ── Check in → calls backend ──
   const checkIn = async (zoneId, endTime, courseName) => {
     try {
-      const res = await api.post(`/parking-zones/checkin/${zoneId}`);
+      const body = {};
+      if (endTime) body.endTime = endTime;
+      if (courseName) body.courseName = courseName;
+      const res = await api.post(`/parking-zones/checkin/${zoneId}`, body);
       if (res.data.success) {
-        setMySession({
+        const sessionData = {
           active:      true,
           zoneId,
           checkedInAt: res.data.checkedInAt,
           endTime:     endTime   || null,
           courseName:  courseName || null,
-        });
+        };
+        prevSessionRef.current = sessionData;
+        setMySession(sessionData);
         setAutoReleasePrompt(false);
         await loadData();
         const zone = zones.find(z => z.id === zoneId);
@@ -110,8 +132,9 @@ export default function ParkingPage() {
     }
   };
 
-  // ── Check out → calls backend ──
   const checkOut = async () => {
+    manualCheckoutRef.current = true;
+    prevSessionRef.current = null;
     try {
       await api.delete("/parking-zones/checkout");
       setMySession(null);
@@ -120,6 +143,7 @@ export default function ParkingPage() {
       await loadData();
       showToast("You have checked out");
     } catch {
+      manualCheckoutRef.current = false;
       showToast("Check-out failed. Try again.");
     }
   };
@@ -156,7 +180,6 @@ export default function ParkingPage() {
   return (
     <div style={page}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
         * { box-sizing: border-box; }
         .zone-card { transition: box-shadow 0.2s, transform 0.2s; }
         .zone-card:hover { box-shadow: 0 14px 36px rgba(15,23,42,0.13); transform: translateY(-3px); }
@@ -173,7 +196,6 @@ export default function ParkingPage() {
 
       {toast && <div style={toastStyle}>{toast}</div>}
 
-      {/* Auto-release prompt */}
       {autoReleasePrompt && mySession && (
         <div style={bannerStyle}>
           <span>Class time is over. Did you leave the <strong>{myZone?.name}</strong> parking area?</span>
@@ -203,7 +225,6 @@ export default function ParkingPage() {
           </div>
         </div>
 
-        {/* My session banner */}
         {mySession && myZone && (
           <div style={mySessionCard}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
@@ -229,7 +250,6 @@ export default function ParkingPage() {
           </div>
         )}
 
-        {/* Confirm leave modal */}
         {confirmLeave && (
           <div style={overlay}>
             <div style={modal}>
@@ -243,7 +263,6 @@ export default function ParkingPage() {
           </div>
         )}
 
-        {/* Zone cards */}
         <div className="parking-grid" style={grid}>
           {zones.map((zone) => {
             const available = zone.total - zone.occupied;
@@ -281,7 +300,6 @@ export default function ParkingPage() {
   );
 }
 
-// ─── Zone Card ────────────────────────────────────────────────────────────────
 function ZoneCard({ zone, available, pct, status, isMyZone, isFull, hasSession, nextClassEnd, onCheckIn }) {
   const [showForm,      setShowForm]      = useState(false);
   const [selectedEnd,   setSelectedEnd]   = useState(nextClassEnd?.endStr || "");
@@ -290,8 +308,9 @@ function ZoneCard({ zone, available, pct, status, isMyZone, isFull, hasSession, 
 
   useEffect(() => {
     if (nextClassEnd) {
-      setSelectedEnd(nextClassEnd.endStr || "");
-      setSelectedCourse(nextClassEnd.courseName || "");
+
+      setSelectedEnd(prev => prev || nextClassEnd.endStr || "");
+      setSelectedCourse(prev => prev || nextClassEnd.courseName || "");
     }
   }, [nextClassEnd]);
 
@@ -384,7 +403,6 @@ function ZoneCard({ zone, available, pct, status, isMyZone, isFull, hasSession, 
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const page           = { padding: "24px 20px 48px", boxSizing: "border-box", fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", background: "#f8fafc" };
 const container      = { maxWidth: "1000px", margin: "0 auto" };
 const headerRow      = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px", marginBottom: "22px" };

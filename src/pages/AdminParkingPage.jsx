@@ -1,11 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-
-const ZONES_DEFAULT = [
-  { id:"main-gate",   name:"Main Gate",   description:"In front of the main gate — student side", icon:"🚪", total:30, occupied:0 },
-  { id:"right-gate",  name:"Right Gate",  description:"Near Lab 3",                                icon:"🔬", total:50, occupied:0 },
-  { id:"lab1",        name:"Near Lab 1",  description:"Students only",                             icon:"🧪", total:45, occupied:0 },
-  { id:"new-parking", name:"New Parking", description:"Across from the college",                   icon:"🏗", total:60, occupied:0 },
-];
+import api from "../api/api";
 
 const getStatus = (pct) => {
   if (pct >= 90) return { bar:"#ef4444", light:"#fef2f2", text:"#dc2626", label:"Almost Full" };
@@ -13,92 +7,73 @@ const getStatus = (pct) => {
   return               { bar:"#22c55e", light:"#f0fdf4", text:"#16a34a", label:"Available"   };
 };
 
-const countSessionsPerZone = () => {
-  const counts = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key?.startsWith("my_parking_session_")) {
-      try {
-        const s = JSON.parse(localStorage.getItem(key));
-        if (s?.zoneId) counts[s.zoneId] = (counts[s.zoneId] || 0) + 1;
-      } catch {}
-    }
-  }
-  return counts;
-};
-
-const clearZoneSessions = (zoneId) => {
-  const keys = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k?.startsWith("my_parking_session_")) {
-      try { if (JSON.parse(localStorage.getItem(k))?.zoneId === zoneId) keys.push(k); } catch {}
-    }
-  }
-  keys.forEach((k) => localStorage.removeItem(k));
-};
-
-const clearAllSessions = () => {
-  const keys = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    if (localStorage.key(i)?.startsWith("my_parking_session_")) keys.push(localStorage.key(i));
-  }
-  keys.forEach((k) => localStorage.removeItem(k));
-};
-
 export default function AdminParkingPage() {
-  const [zones,            setZones]            = useState(() => { const s = localStorage.getItem("parking_zones_v2"); return s ? JSON.parse(s) : ZONES_DEFAULT; });
-  const [sessionCounts,    setSessionCounts]    = useState({});
+  const [zones,            setZones]            = useState([]);
   const [toast,            setToast]            = useState("");
   const [editZone,         setEditZone]         = useState(null);
   const [editValue,        setEditValue]        = useState("");
   const [confirmReset,     setConfirmReset]     = useState(false);
   const [confirmZoneReset, setConfirmZoneReset] = useState(null);
 
-  const refresh = useCallback(() => {
-    setSessionCounts(countSessionsPerZone());
-    const s = localStorage.getItem("parking_zones_v2");
-    if (s) setZones(JSON.parse(s));
+  const refresh = useCallback(async () => {
+    try {
+      const r = await api.get("/parking-zones");
+      setZones(r.data);
+    } catch {}
   }, []);
 
-  useEffect(() => { refresh(); const id = setInterval(refresh, 5000); return () => clearInterval(id); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    const id = setInterval(refresh, 5000);
+    return () => clearInterval(id);
+  }, [refresh]);
 
-  const saveZones = (u) => { setZones(u); localStorage.setItem("parking_zones_v2", JSON.stringify(u)); };
-  const toast$    = (m) => { setToast(m); setTimeout(() => setToast(""), 2800); };
-  const openEdit  = (z) => { setEditZone(z); setEditValue(String(z.occupied)); };
+  const toast$   = (m) => { setToast(m); setTimeout(() => setToast(""), 2800); };
+  const openEdit = (z) => { setEditZone(z); setEditValue(String(z.occupied)); };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     const val = parseInt(editValue, 10);
     if (isNaN(val) || val < 0 || val > editZone.total) { toast$(`⚠️ Enter 0 – ${editZone.total}`); return; }
-    saveZones(zones.map((z) => z.id === editZone.id ? { ...z, occupied: val } : z));
-    setEditZone(null);
-    toast$(`✅ ${editZone.name} set to ${val} occupied`);
+    try {
+      await api.patch(`/parking-zones/${editZone.id}/occupied`, { occupied: val });
+      setEditZone(null);
+      toast$(`✅ ${editZone.name} set to ${val} occupied`);
+      refresh();
+    } catch {
+      toast$("❌ Failed to update");
+    }
   };
 
-  const resetZone = (zone) => {
-    clearZoneSessions(zone.id);
-    saveZones(zones.map((z) => z.id === zone.id ? { ...z, occupied: 0 } : z));
-    setConfirmZoneReset(null); refresh();
-    toast$(`🔄 ${zone.name} reset to 0`);
+  const resetZone = async (zone) => {
+    try {
+      await api.delete(`/parking-zones/${zone.id}/reset`);
+      setConfirmZoneReset(null);
+      refresh();
+      toast$(`🔄 ${zone.name} reset to 0`);
+    } catch {
+      toast$("❌ Reset failed");
+    }
   };
 
-  const resetAll = () => {
-    clearAllSessions();
-    saveZones(zones.map((z) => ({ ...z, occupied: 0 })));
-    setConfirmReset(false); refresh();
-    toast$("🔄 All zones reset to 0");
+  const resetAll = async () => {
+    try {
+      await api.delete("/parking-zones/reset-all");
+      setConfirmReset(false);
+      refresh();
+      toast$("🔄 All zones reset to 0");
+    } catch {
+      toast$("❌ Reset failed");
+    }
   };
 
   const totalSpots    = zones.reduce((s, z) => s + z.total, 0);
   const totalOccupied = zones.reduce((s, z) => s + z.occupied, 0);
   const totalAvail    = totalSpots - totalOccupied;
-  const totalSessions = Object.values(sessionCounts).reduce((s, v) => s + v, 0);
   const overallPct    = totalSpots > 0 ? Math.round((totalOccupied / totalSpots) * 100) : 0;
 
   return (
     <div style={{ padding:"16px 12px 48px", fontFamily:"'DM Sans', system-ui, sans-serif", minHeight:"100vh" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@500&display=swap');
         * { box-sizing: border-box; }
         .az-card { transition: box-shadow 0.18s, transform 0.18s; }
         .az-card:hover { box-shadow: 0 12px 32px rgba(15,23,42,0.12); transform: translateY(-2px); }
@@ -132,7 +107,6 @@ export default function AdminParkingPage() {
 
       {toast && <div style={toastSt} className="az-fi">{toast}</div>}
 
-      {/* Reset All Modal */}
       {confirmReset && (
         <div style={overlay}>
           <div style={modal} className="az-fi">
@@ -147,7 +121,6 @@ export default function AdminParkingPage() {
         </div>
       )}
 
-      {/* Reset Zone Modal */}
       {confirmZoneReset && (
         <div style={overlay}>
           <div style={modal} className="az-fi">
@@ -162,7 +135,6 @@ export default function AdminParkingPage() {
         </div>
       )}
 
-      {/* Edit Count Modal */}
       {editZone && (
         <div style={overlay}>
           <div style={modal} className="az-fi">
@@ -186,7 +158,7 @@ export default function AdminParkingPage() {
       )}
 
       <div className="az-page-inner">
-        {/* Header */}
+
         <div className="az-header-row">
           <div>
             <div style={{display:"inline-block",padding:"4px 12px",borderRadius:"999px",background:"#fef3c7",border:"1px solid #fde68a",color:"#92400e",fontSize:"12px",fontWeight:"700",marginBottom:"8px"}}>🛡 Admin Panel</div>
@@ -199,13 +171,12 @@ export default function AdminParkingPage() {
           </div>
         </div>
 
-        {/* Summary */}
         <div className="az-stats-grid">
           {[
-            {label:"Total Spots",     value:totalSpots,    color:"#0f172a"},
-            {label:"Occupied",        value:totalOccupied, color:"#ef4444"},
-            {label:"Available",       value:totalAvail,    color:"#22c55e"},
-            {label:"Active Check-ins",value:totalSessions, color:"#2563eb"},
+            {label:"Total Spots", value:totalSpots,    color:"#0f172a"},
+            {label:"Occupied",    value:totalOccupied, color:"#ef4444"},
+            {label:"Available",   value:totalAvail,    color:"#22c55e"},
+            {label:"Zones",       value:zones.length,  color:"#2563eb"},
           ].map((s) => (
             <div key={s.label} className="az-stat-card">
               <span style={{fontSize:"26px",fontWeight:"800",color:s.color,fontFamily:"'DM Mono'"}}>{s.value}</span>
@@ -214,19 +185,16 @@ export default function AdminParkingPage() {
           ))}
         </div>
 
-        {/* Live tag */}
         <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"18px"}}>
           <span className="az-live" style={{width:8,height:8,borderRadius:"50%",background:"#22c55e",display:"inline-block"}} />
           <span style={{fontSize:"12px",color:"#64748b",fontWeight:"600"}}>Auto-refreshes every 5 seconds</span>
         </div>
 
-        {/* Zone Cards */}
         <div className="az-zones-grid">
           {zones.map((zone) => {
-            const avail    = zone.total - zone.occupied;
-            const pct      = zone.total > 0 ? Math.round((zone.occupied / zone.total) * 100) : 0;
-            const status   = getStatus(pct);
-            const sessions = sessionCounts[zone.id] || 0;
+            const avail  = zone.total - zone.occupied;
+            const pct    = zone.total > 0 ? Math.round((zone.occupied / zone.total) * 100) : 0;
+            const status = getStatus(pct);
             return (
               <div key={zone.id} className="az-card" style={{background:"white",borderRadius:"16px",padding:"16px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 8px rgba(15,23,42,0.05)",position:"relative",overflow:"hidden"}}>
                 <div style={{position:"absolute",top:0,left:0,right:0,height:"4px",background:status.bar,borderRadius:"16px 16px 0 0"}} />
@@ -247,8 +215,8 @@ export default function AdminParkingPage() {
                     <p style={{margin:"2px 0 0",fontSize:"12px",color:"#94a3b8"}}>available spots</p>
                   </div>
                   <div style={{background:"#eff6ff",borderRadius:"12px",padding:"8px 12px",textAlign:"center",border:"1px solid #bfdbfe",minWidth:"56px"}}>
-                    <div style={{fontSize:"16px",fontWeight:"800",color:"#2563eb",fontFamily:"'DM Mono'"}}>{sessions}</div>
-                    <div style={{fontSize:"10px",color:"#64748b",fontWeight:"600"}}>checked in</div>
+                    <div style={{fontSize:"16px",fontWeight:"800",color:"#2563eb",fontFamily:"'DM Mono'"}}>{zone.occupied}</div>
+                    <div style={{fontSize:"10px",color:"#64748b",fontWeight:"600"}}>occupied</div>
                   </div>
                 </div>
                 <div style={{background:"#f1f5f9",borderRadius:"999px",height:"8px",marginBottom:"6px",overflow:"hidden"}}>
@@ -264,7 +232,6 @@ export default function AdminParkingPage() {
           })}
         </div>
 
-        {/* Overall bar */}
         <div style={{background:"white",borderRadius:"16px",padding:"18px 20px",border:"1.5px solid #e2e8f0",boxShadow:"0 2px 8px rgba(15,23,42,0.05)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px",flexWrap:"wrap",gap:"8px"}}>
             <h3 style={{margin:0,fontSize:"14px",fontWeight:"700",color:"#0f172a"}}>Overall Campus Occupancy</h3>
